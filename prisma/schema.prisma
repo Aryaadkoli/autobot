@@ -1,0 +1,492 @@
+// Autobot Orchestration Platform — complete database schema
+// PostgreSQL + Prisma. Every business table carries tenantId — ALWAYS filter on it.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// TENANCY & USERS
+// ─────────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique // used in URLs, e.g. app.autobot.in/t/alpha-corp
+  timezone  String   @default("Asia/Kolkata")
+  plan      Plan     @default(FREE)
+
+  // Channel credentials (encrypt access tokens at rest with libsodium/secretbox)
+  waPhoneNumberId   String? // Meta Cloud API phone number ID
+  waBusinessAcctId  String? // WABA ID
+  waAccessTokenEnc  String? // encrypted
+  brevoApiKeyEnc    String? // encrypted
+
+  // Platform-wide guardrails
+  dailyCapPerContact Int @default(3)   // frequency cap: max messages/contact/24h
+  quietHoursStart    Int @default(21)  // no sends after 21:00 local
+  quietHoursEnd      Int @default(9)   // no sends before 09:00 local
+
+  createdAt DateTime @default(now())
+
+  users         User[]
+  businessTypes BusinessType[]
+  services      Service[]
+  contacts      Contact[]
+  tags          Tag[]
+  tagRules      TagRule[]
+  imports       Import[]
+  events        Event[]
+  workflows     Workflow[]
+  instances     SequenceInstance[]
+  templates     MessageTemplate[]
+  messages      Message[]
+  links         Link[]
+  apiKeys       ApiKey[]
+  campaigns     Campaign[]
+  scheduledCampaigns ScheduledCampaign[]
+}
+
+enum Plan {
+  FREE
+  PAID
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  email        String
+  passwordHash String
+  name         String
+  role         Role     @default(ADMIN)
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, email])
+}
+
+enum Role {
+  OWNER  // your dad / the buying business owner
+  ADMIN  // can edit workflows, templates
+  AGENT  // read-only + can view conversations
+}
+
+// ─────────────────────────────────────────────
+// HIERARCHY: Company(=Tenant) → BusinessType → Service → Contact
+// ─────────────────────────────────────────────
+
+model BusinessType {
+  id       String    @id @default(cuid())
+  tenantId String
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  name     String    // e.g. "Distribution", "Retail"
+  services Service[]
+  contacts Contact[]
+
+  @@unique([tenantId, name])
+}
+
+model Service {
+  id             String       @id @default(cuid())
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id])
+  businessTypeId String
+  businessType   BusinessType @relation(fields: [businessTypeId], references: [id])
+  name           String       // e.g. "New product leads"
+  type           ServiceType
+  priority       Int          // LOWER number = HIGHER priority. PAYMENT=10, LEAD=50...
+  workflows      Workflow[]
+
+  @@unique([tenantId, name])
+}
+
+enum ServiceType {
+  LEAD
+  PAYMENT
+  STOCK
+  AUTO_PO
+  CUSTOM
+}
+
+// ─────────────────────────────────────────────
+// CONTACTS, TAGS, RULES
+// ─────────────────────────────────────────────
+
+model Contact {
+  id             String        @id @default(cuid())
+  tenantId       String
+  tenant         Tenant        @relation(fields: [tenantId], references: [id])
+  phone          String        // E.164, e.g. +919812345678 — primary identity in India
+  email          String?
+  name           String?
+  businessTypeId String?
+  businessType   BusinessType? @relation(fields: [businessTypeId], references: [id])
+
+  // Free-form business data from Excel/ERP: {"city":"Pune","last_order_date":"2026-06-01","credit_days":30}
+  attributes Json @default("{}")
+
+  // Consent — survival features, not checkboxes
+  waOptedOut    Boolean @default(false)
+  emailOptedOut Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tags      ContactTag[]
+  events    Event[]
+  instances SequenceInstance[]
+  messages  Message[]
+
+  @@unique([tenantId, phone]) // dedupe key on import
+  @@index([tenantId, businessTypeId])
+}
+
+model Tag {
+  id       String       @id @default(cuid())
+  tenantId String
+  tenant   Tenant       @relation(fields: [tenantId], references: [id])
+  name     String       // "dormant-30d", "high-value", "interested-productX"
+  contacts ContactTag[]
+  rules    TagRule[]
+  scheduledCampaigns ScheduledCampaign[]
+
+  @@unique([tenantId, name])
+}
+
+model ContactTag {
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id])
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id])
+  addedAt   DateTime @default(now())
+
+  @@id([contactId, tagId])
+}
+
+// The Categorization Script from the spec — rules stored as data, editable in UI later
+model TagRule {
+  id       String     @id @default(cuid())
+  tenantId String
+  tenant   Tenant     @relation(fields: [tenantId], references: [id])
+  name     String     // "Mark dormant after 30 days"
+  // Condition tree, e.g.:
+  // {"all":[{"attr":"last_order_date","op":"olderThanDays","value":30},
+  //         {"attr":"city","op":"eq","value":"Pune"}]}
+  condition Json
+  tagId     String
+  tag       Tag        @relation(fields: [tagId], references: [id])
+  runOn     RuleRunOn  @default(BOTH)
+  active    Boolean    @default(true)
+}
+
+enum RuleRunOn {
+  INGEST   // evaluate when a contact is imported/updated
+  SCHEDULE // evaluate in the nightly sweep (for time-based conditions)
+  BOTH
+}
+
+// ─────────────────────────────────────────────
+// INGESTION
+// ─────────────────────────────────────────────
+
+model Import {
+  id            String       @id @default(cuid())
+  tenantId      String
+  tenant        Tenant       @relation(fields: [tenantId], references: [id])
+  filename      String
+  // {"Mobile No":"phone","Customer Name":"name","City":"attributes.city"}
+  columnMapping Json
+  status        ImportStatus @default(PENDING)
+  totalRows     Int          @default(0)
+  importedRows  Int          @default(0)
+  failedRows    Int          @default(0)
+  errorReport   Json?        // [{row: 14, error: "invalid phone"}]
+  createdAt     DateTime     @default(now())
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+  name       String    // "ERP webhook key"
+  keyHash    String    @unique // store SHA-256, show plaintext once at creation
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+// ─────────────────────────────────────────────
+// EVENTS — append-only source of truth
+// Both behavior triggers AND analytics read from here.
+// ─────────────────────────────────────────────
+
+model Event {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+  contactId  String
+  contact    Contact   @relation(fields: [contactId], references: [id])
+  type       EventType
+  payload    Json      @default("{}") // {"messageId":"...","url":"...","amount":5000}
+  occurredAt DateTime  @default(now())
+
+  @@index([tenantId, contactId, type, occurredAt])
+  @@index([tenantId, occurredAt]) // analytics scans
+}
+
+enum EventType {
+  IMPORTED
+  UPDATED
+  MSG_SENT
+  MSG_DELIVERED
+  MSG_READ
+  MSG_FAILED
+  LINK_CLICKED
+  REPLIED
+  PAYMENT_RECEIVED
+  ORDER_PLACED
+  OPTED_OUT
+  CUSTOM // from the ingest API, payload carries details
+}
+
+// ─────────────────────────────────────────────
+// WORKFLOWS & SEQUENCES
+// ─────────────────────────────────────────────
+
+model Workflow {
+  id        String         @id @default(cuid())
+  tenantId  String
+  tenant    Tenant         @relation(fields: [tenantId], references: [id])
+  serviceId String
+  service   Service        @relation(fields: [serviceId], references: [id])
+  name      String
+  version   Int            @default(1)
+  isSubflow Boolean        @default(false) // sub-flows are pivot targets, not entered directly
+  status    WorkflowStatus @default(DRAFT)
+  // The playbook — see workflow-format.md for the JSON structure
+  definition Json
+  createdAt  DateTime      @default(now())
+
+  instances SequenceInstance[]
+
+  @@unique([tenantId, name, version])
+}
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+// One row per (contact × workflow run) — the "State Table" from the spec
+model SequenceInstance {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  contactId  String
+  contact    Contact  @relation(fields: [contactId], references: [id])
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id])
+
+  currentStepId String?
+  status        InstanceStatus @default(ACTIVE)
+  wakeAt        DateTime?      // when the pending delayed job fires
+  waitingFor    EventType?     // which behavior event would transition this instance
+  bullJobId     String?        // pending BullMQ job — cancel it on pivot
+
+  pivotedToId String? // instance id of the sub-flow this pivoted into
+  context     Json    @default("{}") // per-run variables, e.g. {"invoice_no":"INV-201"}
+
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  @@index([tenantId, contactId, status]) // "does this contact have an active payment flow?"
+  @@index([status, wakeAt])              // worker sweep safety net
+  @@index([tenantId, workflowId, status]) // analytics: conversion per workflow
+}
+
+enum InstanceStatus {
+  ACTIVE
+  COMPLETED  // reached an end step — this is a "conversion"
+  PIVOTED    // killed by a CTA, sub-flow started
+  CANCELLED  // manual stop or opt-out
+  SUPPRESSED // gatekeeper blocked it permanently (e.g. opted out mid-flow)
+}
+
+// ─────────────────────────────────────────────
+// TEMPLATES & MESSAGES
+// ─────────────────────────────────────────────
+
+model MessageTemplate {
+  id       String  @id @default(cuid())
+  tenantId String
+  tenant   Tenant  @relation(fields: [tenantId], references: [id])
+  name     String  // internal name used in workflow JSON: "payment_reminder_1"
+  channel  Channel
+
+  // WhatsApp: Meta template name + category (drives cost: UTILITY ≈ ₹0.115 vs MARKETING ≈ ₹0.86)
+  metaTemplateName String?
+  metaCategory     MetaCategory?
+  metaLanguage     String?       @default("en")
+
+  // Header media for WhatsApp templates (image or PDF pamphlet)
+  mediaUrl  String?
+  mediaType MediaType?
+
+  body           String // with {{1}}, {{2}} placeholders (or {{name}} for email)
+  variables      Json   @default("[]") // [{"pos":1,"source":"contact.name"},{"pos":2,"source":"context.invoice_no"}]
+  approvalStatus TemplateApproval @default(PENDING)
+  createdAt      DateTime @default(now())
+
+  messages  Message[]
+  campaigns Campaign[]
+  scheduledCampaigns ScheduledCampaign[]
+
+  @@unique([tenantId, name])
+}
+
+// A planned future send — "on this date, send this template to this
+// segment." A lightweight stand-in for the real workflow engine (Phase 4):
+// no recurrence, no behavior triggers, just "at time X, run this campaign."
+// Picked up by the in-process scheduler in instrumentation.ts.
+model ScheduledCampaign {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  templateId String
+  template   MessageTemplate @relation(fields: [templateId], references: [id])
+  name       String   // e.g. "Mango farmers — January reminder"
+
+  tagId String?
+  tag   Tag?    @relation(fields: [tagId], references: [id])
+  stage String?
+
+  scheduledFor DateTime
+  recurrence   ScheduledCampaignRecurrence @default(NONE)
+  status       ScheduledCampaignStatus @default(PENDING)
+  ranCampaignId String? // points to the Campaign history row once it runs
+  errorMessage  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([status, scheduledFor])
+}
+
+enum ScheduledCampaignRecurrence {
+  NONE
+  MONTHLY
+  YEARLY
+}
+
+enum ScheduledCampaignStatus {
+  PENDING
+  SENT
+  CANCELLED
+  FAILED
+}
+
+// One row per Campaigns-page send — a lightweight run log (not the full
+// enrollment/state-machine model Phase 4's workflow engine will bring).
+model Campaign {
+  id         String           @id @default(cuid())
+  tenantId   String
+  tenant     Tenant           @relation(fields: [tenantId], references: [id])
+  templateId String?
+  template   MessageTemplate? @relation(fields: [templateId], references: [id])
+  source     String           // e.g. "Tag: High-Value Customer", "Uploaded list: leads.xlsx"
+
+  targetedCount Int
+  sentCount     Int
+  failedCount   Int
+  skippedCount  Int
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+enum Channel {
+  WHATSAPP
+  EMAIL
+}
+
+enum MetaCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+}
+
+enum MediaType {
+  IMAGE
+  DOCUMENT
+}
+
+enum TemplateApproval {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Message {
+  id         String           @id @default(cuid())
+  tenantId   String
+  tenant     Tenant           @relation(fields: [tenantId], references: [id])
+  contactId  String
+  contact    Contact          @relation(fields: [contactId], references: [id])
+  instanceId String?          // null for one-off/manual sends
+  stepId     String?
+  templateId String?
+  template   MessageTemplate? @relation(fields: [templateId], references: [id])
+  channel    Channel
+
+  // THE idempotency key: `${instanceId}:${stepId}` (or `manual:${uuid}`)
+  // Worker refuses to send if this key already exists → no double sends, ever.
+  dedupeKey String @unique
+
+  providerMessageId String?       // Meta wamid / provider request id — webhook lookups
+  status            MessageStatus @default(QUEUED)
+  error             String?
+  costPaise         Int?          // track spend: 12 = ₹0.115 utility, 86 = marketing
+  renderedBody      String?       // what was actually sent, for the conversation view
+
+  sentAt          DateTime?
+  statusUpdatedAt DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+
+  links Link[]
+
+  @@index([tenantId, contactId, sentAt]) // frequency-cap query
+  @@index([providerMessageId])           // status webhook lookup
+  @@index([tenantId, createdAt])         // analytics
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SUPPRESSED // gatekeeper blocked (cap / quiet hours / priority / opt-out)
+}
+
+// Every outbound URL is rewritten to autobot.in/r/{token} → click = trackable event
+model Link {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id])
+  token     String  @unique // short, unguessable: nanoid(10)
+  targetUrl String
+  clicks    Int     @default(0)
+}
