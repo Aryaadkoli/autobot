@@ -3,11 +3,14 @@ import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
 import Mascot from "@/components/mascot";
 import { STAGES } from "./contacts/stages";
+import { eventLabel, eventDotClass } from "./contacts/event-meta";
+import { hoursAgo } from "@/lib/dates";
 
 export default async function OverviewPage() {
   const { tenantId, name } = await requireSession();
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const since24h = hoursAgo(24);
+  const since7d = hoursAgo(7 * 24);
   const [
     tenant,
     contacts,
@@ -16,13 +19,16 @@ export default async function OverviewPage() {
     stageCounts,
     topTags,
     businessTypeCount,
+    weekMessageStatusGroups,
+    weekEventCounts,
+    recentEvents,
   ] = await Promise.all([
     prisma.tenant.findUniqueOrThrow({
       where: { id: tenantId },
       select: { name: true },
     }),
     prisma.contact.count({ where: { tenantId } }),
-    prisma.message.count({ where: { tenantId, createdAt: { gte: since } } }),
+    prisma.message.count({ where: { tenantId, createdAt: { gte: since24h } } }),
     prisma.sequenceInstance.count({ where: { tenantId, status: "ACTIVE" } }),
     Promise.all(
       STAGES.map((s) =>
@@ -38,7 +44,43 @@ export default async function OverviewPage() {
       take: 5,
     }),
     prisma.businessType.count({ where: { tenantId } }),
+    prisma.message.groupBy({
+      by: ["status"],
+      where: { tenantId, createdAt: { gte: since7d } },
+      _count: { _all: true },
+    }),
+    prisma.event.groupBy({
+      by: ["type"],
+      where: { tenantId, occurredAt: { gte: since7d }, type: { in: ["REPLIED", "LINK_CLICKED"] } },
+      _count: { _all: true },
+    }),
+    prisma.event.findMany({
+      where: { tenantId },
+      orderBy: { occurredAt: "desc" },
+      take: 8,
+      include: { contact: { select: { name: true, phone: true } } },
+    }),
   ]);
+
+  const weekCounts = Object.fromEntries(
+    weekMessageStatusGroups.map((g) => [g.status, g._count._all])
+  ) as Record<string, number>;
+  const weekSentTotal =
+    (weekCounts.SENT ?? 0) + (weekCounts.DELIVERED ?? 0) + (weekCounts.READ ?? 0) + (weekCounts.FAILED ?? 0);
+  const weekDelivered = (weekCounts.DELIVERED ?? 0) + (weekCounts.READ ?? 0);
+  const weekEvents = Object.fromEntries(
+    weekEventCounts.map((g) => [g.type, g._count._all])
+  ) as Record<string, number>;
+
+  function pct(n: number, d: number) {
+    return d === 0 ? "—" : `${Math.round((n / d) * 100)}%`;
+  }
+
+  const weekMetrics = [
+    { label: "Delivery rate", value: pct(weekDelivered, weekSentTotal) },
+    { label: "Reply rate", value: pct(weekEvents.REPLIED ?? 0, weekSentTotal) },
+    { label: "Click rate", value: pct(weekEvents.LINK_CLICKED ?? 0, weekSentTotal) },
+  ];
 
   const stats = [
     { label: "Leads", value: contacts },
@@ -50,19 +92,6 @@ export default async function OverviewPage() {
     { href: "/contacts?new=1", label: "Add a lead" },
     { href: "/contacts?import=1", label: "Import leads" },
     { href: "/contacts", label: "View all leads" },
-  ];
-
-  const placeholderMetrics = [
-    { label: "Delivery rate" },
-    { label: "Reply rate" },
-    { label: "Click rate" },
-  ];
-
-  const placeholderActivity = [
-    "Message delivered to a lead",
-    "Lead clicked a tracked link",
-    "New lead imported",
-    "Lead replied to a follow-up",
   ];
 
   const stageBreakdown = STAGES.map((s, i) => ({
@@ -201,52 +230,61 @@ export default async function OverviewPage() {
               <h2 className="text-sm font-medium text-stone-700">
                 This week
               </h2>
-              <span className="text-[10px] uppercase tracking-wide text-stone-400 bg-stone-100 rounded-full px-2 py-0.5">
-                Soon
-              </span>
+              <Link
+                href="/analytics"
+                className="text-[11px] text-amber-700 hover:underline"
+              >
+                Full analytics →
+              </Link>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              {placeholderMetrics.map((m) => (
+              {weekMetrics.map((m) => (
                 <div
                   key={m.label}
                   className="bg-white rounded-2xl border border-stone-200 p-3"
                 >
-                  <div className="text-xl font-semibold text-stone-300">—</div>
+                  <div className="text-xl font-semibold text-stone-900">{m.value}</div>
                   <div className="text-[11px] text-stone-500 mt-1 leading-tight">
                     {m.label}
                   </div>
                 </div>
               ))}
             </div>
+            {weekSentTotal === 0 && (
+              <p className="text-xs text-stone-400 mt-2">
+                No sends in the last 7 days yet.
+              </p>
+            )}
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-medium text-stone-700">
-                Recent activity
-              </h2>
-              <span className="text-[10px] uppercase tracking-wide text-stone-400 bg-stone-100 rounded-full px-2 py-0.5">
-                Soon
-              </span>
-            </div>
-            <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100">
-              {placeholderActivity.map((item) => (
-                <div
-                  key={item}
-                  className="px-4 py-2.5 text-sm text-stone-400 flex items-center gap-2.5"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-stone-200 shrink-0" />
-                  {item}
-                </div>
-              ))}
-            </div>
+            <h2 className="text-sm font-medium text-stone-700 mb-3">
+              Recent activity
+            </h2>
+            {recentEvents.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-stone-200 px-4 py-6 text-center">
+                <p className="text-sm text-stone-500">Nothing yet — activity shows up here as leads come in.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100">
+                {recentEvents.map((e) => (
+                  <div
+                    key={e.id}
+                    className="px-4 py-2.5 text-sm text-stone-700 flex items-center gap-2.5"
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${eventDotClass(e.type)}`} />
+                    <span className="truncate">
+                      {eventLabel(e.type)}
+                      <span className="text-stone-400">
+                        {" "}
+                        — {e.contact.name || e.contact.phone}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-
-          <p className="text-xs text-stone-500">
-            Messages, sequences and the activity feed will start filling in
-            once the WhatsApp/email sending pipeline and workflow engine
-            are built.
-          </p>
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { outcomeLabelFromDefinition } from "@/core/workflow/outcome-label";
 import StageBadge from "../stage-badge";
 import { formatAttributeLabel, visibleAttributes } from "../attributes";
 import { eventLabel, eventDotClass } from "../event-meta";
@@ -21,11 +22,27 @@ export default async function LeadDetailPage({
 
   if (!contact) notFound();
 
-  const events = await prisma.event.findMany({
-    where: { tenantId, contactId: contact.id },
-    orderBy: { occurredAt: "desc" },
-    take: 50,
-  });
+  const [events, instances] = await Promise.all([
+    prisma.event.findMany({
+      where: { tenantId, contactId: contact.id },
+      orderBy: { occurredAt: "desc" },
+      take: 50,
+    }),
+    prisma.sequenceInstance.findMany({
+      where: { tenantId, contactId: contact.id },
+      orderBy: { startedAt: "desc" },
+      take: 5,
+      include: { workflow: { select: { name: true, definition: true } } },
+    }),
+  ]);
+
+  const INSTANCE_STATUS_STYLE: Record<string, string> = {
+    ACTIVE: "bg-amber-50 text-amber-700 border-amber-200",
+    COMPLETED: "bg-green-50 text-green-700 border-green-200",
+    PIVOTED: "bg-blue-50 text-blue-700 border-blue-200",
+    CANCELLED: "bg-stone-50 text-stone-500 border-stone-200",
+    SUPPRESSED: "bg-red-50 text-red-700 border-red-200",
+  };
 
   const attrs = contact.attributes as { stage?: string } | null;
   const details = visibleAttributes(contact.attributes);
@@ -75,6 +92,32 @@ export default async function LeadDetailPage({
                 {t.tag.name}
               </span>
             ))}
+          </div>
+        )}
+
+        {instances.length > 0 && (
+          <div className="mt-5 pt-5 border-t border-stone-100">
+            <div className="text-xs text-stone-500 mb-2">Workflows</div>
+            <div className="space-y-1.5">
+              {instances.map((inst) => (
+                <div key={inst.id} className="flex items-center justify-between text-sm">
+                  <Link href="/workflows" className="text-stone-700 hover:text-stone-900">
+                    {inst.workflow.name}
+                  </Link>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-xs border ${
+                      INSTANCE_STATUS_STYLE[inst.status] ?? ""
+                    }`}
+                  >
+                    {inst.status === "COMPLETED"
+                      ? outcomeLabelFromDefinition(inst.workflow.definition, inst.currentStepId)
+                      : inst.status === "ACTIVE"
+                        ? "In progress"
+                        : inst.status}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

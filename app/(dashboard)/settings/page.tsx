@@ -7,11 +7,11 @@ import SendingLimits from "./sending-limits";
 export default async function SettingsPage() {
   const session = await requireSession();
 
-  const [users, tenant] = await Promise.all([
+  const [membershipRows, tenant] = await Promise.all([
     prisma.user.findMany({
       where: { tenantId: session.tenantId },
-      select: { id: true, name: true, email: true, role: true },
-      orderBy: { name: "asc" },
+      select: { id: true, role: true, account: { select: { name: true, email: true } } },
+      orderBy: { account: { name: "asc" } },
     }),
     prisma.tenant.findUniqueOrThrow({
       where: { id: session.tenantId },
@@ -50,7 +50,12 @@ export default async function SettingsPage() {
 
       <div className="mt-10">
         <SettingsClient
-          users={users}
+          users={membershipRows.map((u) => ({
+            id: u.id,
+            role: u.role,
+            name: u.account.name,
+            email: u.account.email,
+          }))}
           currentUserId={session.userId}
           isOwner={session.role === "OWNER"}
         />

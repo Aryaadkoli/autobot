@@ -17,6 +17,7 @@ type Template = {
   mediaType: string | null;
   variables: { pos: number; source: string }[];
   approvalStatus: string;
+  sends: { sent: number; delivered: number; failed: number };
 };
 
 type Lead = { id: string; name: string | null; phone: string };
@@ -131,6 +132,7 @@ export default function TemplatesClient({
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Channel</th>
                 <th className="px-4 py-3 font-medium">Message</th>
+                <th className="px-4 py-3 font-medium">Sent</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -175,6 +177,17 @@ export default function TemplatesClient({
                   </td>
                   <td className="px-4 py-3 text-stone-600 max-w-xs truncate">
                     {t.body}
+                  </td>
+                  <td className="px-4 py-3 text-stone-600">
+                    {t.sends.sent === 0 ? (
+                      <span className="text-stone-400">—</span>
+                    ) : (
+                      <span
+                        title={`${t.sends.delivered} delivered, ${t.sends.failed} failed`}
+                      >
+                        {t.sends.sent}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-3">

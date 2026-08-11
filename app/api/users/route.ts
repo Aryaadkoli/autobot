@@ -1,8 +1,9 @@
 import { z } from "zod";
-import bcrypt from "bcryptjs";
 import { Prisma } from "@prisma/client";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { getOrCreateAccountForInvite } from "@/lib/accounts";
+import { sendAccountEmail } from "@/lib/mailer";
 
 // OWNER is intentionally not offered here — it's meant to be the single
 // business owner account created at seed/signup time, not something
@@ -24,11 +25,13 @@ export async function GET() {
 
   const users = await prisma.user.findMany({
     where: { tenantId: session.tenantId },
-    select: { id: true, name: true, email: true, role: true },
-    orderBy: { name: "asc" },
+    select: { id: true, role: true, account: { select: { name: true, email: true } } },
+    orderBy: { account: { name: "asc" } },
   });
 
-  return Response.json(users);
+  return Response.json(
+    users.map((u) => ({ id: u.id, role: u.role, name: u.account.name, email: u.account.email }))
+  );
 }
 
 export async function POST(req: Request) {
@@ -55,28 +58,42 @@ export async function POST(req: Request) {
   }
   const { name, email, password, role } = parsed.data;
 
-  const existing = await prisma.user.findFirst({
-    where: { tenantId: session.tenantId, email },
+  const { account, isNew } = await getOrCreateAccountForInvite(email, name, password);
+
+  const existingMembership = await prisma.user.findFirst({
+    where: { tenantId: session.tenantId, accountId: account.id },
   });
-  if (existing) {
+  if (existingMembership) {
     return Response.json(
-      { error: "A teammate with this email already exists" },
+      { error: "A teammate with this email already has access here" },
       { status: 409 }
     );
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const tenant = await prisma.tenant.findUniqueOrThrow({
+    where: { id: session.tenantId },
+    select: { name: true },
+  });
 
   try {
     const user = await prisma.user.create({
-      data: { tenantId: session.tenantId, name, email, passwordHash, role },
-      select: { id: true, name: true, email: true, role: true },
+      data: { tenantId: session.tenantId, accountId: account.id, role },
+      select: { id: true, role: true },
     });
-    return Response.json(user, { status: 201 });
+
+    await sendAccountEmail(
+      email,
+      `You've been added to ${tenant.name} on Autobot`,
+      isNew
+        ? `Hi ${name},\n\n${session.name} added you to ${tenant.name} on Autobot as ${role}.\n\nLog in at your Autobot URL with:\nEmail: ${email}\nTemporary password: ${password}\n\nYou can change this password after logging in.`
+        : `Hi ${name},\n\n${session.name} added you to ${tenant.name} on Autobot as ${role}. Log in with your existing Autobot email and password — after logging in you may need to pick this business if you're part of more than one.`
+    );
+
+    return Response.json({ id: user.id, role: user.role, name, email }, { status: 201 });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return Response.json(
-        { error: "A teammate with this email already exists" },
+        { error: "A teammate with this email already has access here" },
         { status: 409 }
       );
     }

@@ -27,6 +27,26 @@ async function upsertTag(tenantId: string, name: string, previousNames: string[]
   return prisma.tag.create({ data: { tenantId, name } });
 }
 
+// Get-or-create an Account by email, updating its password/name each
+// reseed (so `npx prisma db seed` always leaves it logging in with
+// SEED_ADMIN_PASSWORD, even after someone changed it via the app).
+async function upsertAccount(email: string, name: string, password: string) {
+  const passwordHash = await bcrypt.hash(password, 10);
+  return prisma.account.upsert({
+    where: { email },
+    update: { passwordHash, name },
+    create: { email, name, passwordHash },
+  });
+}
+
+async function upsertMembership(tenantId: string, accountId: string, role: "OWNER" | "ADMIN" | "AGENT") {
+  return prisma.user.upsert({
+    where: { tenantId_accountId: { tenantId, accountId } },
+    update: { role },
+    create: { tenantId, accountId, role },
+  });
+}
+
 async function main() {
   const tenant = await prisma.tenant.upsert({
     where: { slug: "tenant-1" },
@@ -37,36 +57,32 @@ async function main() {
     },
   });
 
-  const passwordHash = await bcrypt.hash(
-    process.env.SEED_ADMIN_PASSWORD ?? "changeme123",
-    10
-  );
+  // A second Tenant — the electricity/smart-meters business, kept
+  // separate from the agri-inputs one per the "we'll need a separate
+  // tenant for dad's electricity business" conversation. Same owner
+  // account, different business — exactly the "one email, two tenants"
+  // case the /select-tenant picker exists for.
+  const energyTenant = await prisma.tenant.upsert({
+    where: { slug: "tenant-2" },
+    update: { name: "Surabharati Energy" },
+    create: {
+      name: "Surabharati Energy",
+      slug: "tenant-2",
+    },
+  });
 
-  // Renames the owner login in place (preserving id, and every FK that
-  // points at it) if it still exists under an old email — same
-  // rename-safe pattern as upsertTag — instead of creating a duplicate
-  // account when the login email changes.
-  const ADMIN_EMAIL = "aryaadkoli@gmail.com";
-  const existingAdmin =
-    (await prisma.user.findFirst({ where: { tenantId: tenant.id, email: ADMIN_EMAIL } })) ??
-    (await prisma.user.findFirst({ where: { tenantId: tenant.id, email: "admin@autobot.local" } }));
+  const seedPassword = process.env.SEED_ADMIN_PASSWORD ?? "changeme123";
 
-  if (existingAdmin) {
-    await prisma.user.update({
-      where: { id: existingAdmin.id },
-      data: { email: ADMIN_EMAIL, passwordHash },
-    });
-  } else {
-    await prisma.user.create({
-      data: {
-        tenantId: tenant.id,
-        email: ADMIN_EMAIL,
-        passwordHash,
-        name: "Admin",
-        role: "OWNER",
-      },
-    });
-  }
+  // aryaadkoli@gmail.com — OWNER of both tenants, the "multi-tenant"
+  // test account /select-tenant is for.
+  const ownerAccount = await upsertAccount("aryaadkoli@gmail.com", "Arya Adkoli", seedPassword);
+  await upsertMembership(tenant.id, ownerAccount.id, "OWNER");
+  await upsertMembership(energyTenant.id, ownerAccount.id, "OWNER");
+
+  // admin@autobot.local — deliberately given ZERO tenant memberships, so
+  // logging in as this account exercises the "you're not part of any
+  // business yet" empty state instead of a dashboard.
+  await upsertAccount("admin@autobot.local", "Admin", seedPassword);
 
   const distribution = await prisma.businessType.upsert({
     where: { tenantId_name: { tenantId: tenant.id, name: "Distribution" } },
@@ -368,9 +384,47 @@ async function main() {
     });
   }
 
+  // A small, separate demo dataset for the electricity/smart-meters
+  // tenant — enough that picking it from /select-tenant leads somewhere
+  // real, not an empty shell.
+  const meters = await prisma.businessType.upsert({
+    where: { tenantId_name: { tenantId: energyTenant.id, name: "Smart Meters" } },
+    update: {},
+    create: { tenantId: energyTenant.id, name: "Smart Meters" },
+  });
+  await prisma.service.upsert({
+    where: { tenantId_name: { tenantId: energyTenant.id, name: "Meter alerts" } },
+    update: {},
+    create: {
+      tenantId: energyTenant.id,
+      businessTypeId: meters.id,
+      name: "Meter alerts",
+      type: "CUSTOM",
+      priority: 30,
+    },
+  });
+  const energyContacts = [
+    { phone: "+919811122233", name: "Vikram Singh", city: "Delhi", stage: "new" },
+    { phone: "+919822233344", name: "Sunita Rao", city: "Pune", stage: "contacted" },
+  ];
+  for (const c of energyContacts) {
+    await prisma.contact.upsert({
+      where: { tenantId_phone: { tenantId: energyTenant.id, phone: c.phone } },
+      update: { name: c.name, businessTypeId: meters.id },
+      create: {
+        tenantId: energyTenant.id,
+        phone: c.phone,
+        name: c.name,
+        businessTypeId: meters.id,
+        attributes: { city: c.city, source: "seed", stage: c.stage },
+      },
+    });
+  }
+
   console.log(
-    "Seed complete. Login: aryaadkoli@gmail.com /",
-    process.env.SEED_ADMIN_PASSWORD ?? "changeme123"
+    "Seed complete.\n" +
+      `  Multi-tenant login: aryaadkoli@gmail.com / ${seedPassword} (Surabharati + Surabharati Energy)\n` +
+      `  No-tenant login: admin@autobot.local / ${seedPassword} (for reviewing the empty state)`
   );
 }
 

@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   await writeFile(path.join(dir, filename), buffer);
 
   const relativeUrl = `/uploads/templates/${filename}`;
-  const base = process.env.APP_BASE_URL?.replace(/\/$/, "");
+  const base = process.env.APP_URL?.replace(/\/$/, "");
 
   return Response.json({
     url: base ? `${base}${relativeUrl}` : relativeUrl,

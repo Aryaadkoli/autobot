@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 
-export default function PasswordInput() {
+export default function PasswordInput({
+  autoComplete = "current-password",
+}: {
+  autoComplete?: "current-password" | "new-password";
+}) {
   const [visible, setVisible] = useState(false);
 
   return (
@@ -12,7 +16,7 @@ export default function PasswordInput() {
         name="password"
         type={visible ? "text" : "password"}
         required
-        autoComplete="current-password"
+        autoComplete={autoComplete}
         className="w-full rounded-lg border border-stone-800 bg-stone-900 px-3.5 py-2.5 pr-11 text-base text-white placeholder-stone-500 outline-none transition-all duration-150 focus:scale-[1.01] focus:border-amber-500/60 focus:ring-4 focus:ring-amber-500/10"
       />
       <button

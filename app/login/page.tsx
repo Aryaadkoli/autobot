@@ -1,6 +1,7 @@
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import PasswordInput from "./password-input";
 import SubmitButton from "./submit-button";
 import Mascot from "@/components/mascot";
@@ -148,7 +149,14 @@ export default async function LoginPage({
           </div>
         </form>
 
-        <div className="mt-10 flex flex-col items-center gap-2 opacity-0 [animation:fade-in-up_0.5s_ease-out_0.4s_forwards]">
+        <p className="mt-6 text-center text-sm text-stone-500 opacity-0 [animation:fade-in-up_0.5s_ease-out_0.35s_forwards]">
+          New here?{" "}
+          <Link href="/signup" className="text-amber-500 hover:underline">
+            Create an account
+          </Link>
+        </p>
+
+        <div className="mt-6 flex flex-col items-center gap-2 opacity-0 [animation:fade-in-up_0.5s_ease-out_0.4s_forwards]">
           <div className="flex items-center gap-1.5 text-xs text-stone-500">
             <svg
               xmlns="http://www.w3.org/2000/svg"

@@ -16,6 +16,15 @@ type Detail = {
     tags: { id: string; name: string }[];
   };
   events: { id: string; type: string; occurredAt: string }[];
+  workflows: { id: string; name: string; status: string; outcome: string | null }[];
+};
+
+const INSTANCE_STATUS_STYLE: Record<string, string> = {
+  ACTIVE: "bg-amber-50 text-amber-700 border-amber-200",
+  COMPLETED: "bg-green-50 text-green-700 border-green-200",
+  PIVOTED: "bg-blue-50 text-blue-700 border-blue-200",
+  CANCELLED: "bg-stone-50 text-stone-500 border-stone-200",
+  SUPPRESSED: "bg-red-50 text-red-700 border-red-200",
 };
 
 export default function LeadDetailModal({
@@ -105,6 +114,30 @@ export default function LeadDetailModal({
                   {t.name}
                 </span>
               ))}
+            </div>
+          )}
+
+          {data.workflows.length > 0 && (
+            <div className="mt-5 pt-5 border-t border-stone-100">
+              <div className="text-xs text-stone-500 mb-2">Workflows</div>
+              <div className="space-y-1.5">
+                {data.workflows.map((w) => (
+                  <div key={w.id} className="flex items-center justify-between text-sm">
+                    <span className="text-stone-700">{w.name}</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs border ${
+                        INSTANCE_STATUS_STYLE[w.status] ?? ""
+                      }`}
+                    >
+                      {w.status === "COMPLETED"
+                        ? w.outcome
+                        : w.status === "ACTIVE"
+                          ? "In progress"
+                          : w.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

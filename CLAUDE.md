@@ -56,8 +56,8 @@ they are just different workflows on identical machinery.
   microservices. Deployed later with Docker Compose on a single VM.
 - Layout: NO src/ directory. app/ is at the project root; alias @/* = root.
 - Stack: Next.js App Router, TypeScript, Tailwind, Prisma + PostgreSQL,
-  NextAuth v5 (credentials, JWT sessions carrying tenantId), BullMQ + Redis
-  (worker phase), zod for all validation.
+  NextAuth v5 (credentials, JWT sessions), BullMQ + Redis (worker phase),
+  zod for all validation.
 - Business logic lives in core/ (framework-free, no Next.js imports) —
   routes and worker processors are thin shells calling into core/. This
   keeps logic testable and portable.
@@ -65,6 +65,12 @@ they are just different workflows on identical machinery.
   business is tenant #1; future paying clients are tenants #2, #3...).
   Every table carries tenantId. The word "tenant" stays in code only —
   never in the UI.
+- Identity vs. tenant membership (since the Account/signup work): a login
+  (email+password) is an Account — global, not tied to one business. User
+  is a pure membership row (tenantId + accountId + role) — the same
+  Account can hold a User row in more than one Tenant (one email, several
+  businesses, pick one after login). See "Accounts, signup, multi-tenant
+  login" below for the full shape.
 
 ## Vocabulary (use these consistently in code)
 
@@ -77,6 +83,9 @@ they are just different workflows on identical machinery.
   idempotency)
 - Event = one append-only history row; both the trigger source and the
   analytics source
+- Account = the login identity (email + password), global across tenants
+- User = one Account's membership + role in one Tenant (not the login
+  itself anymore — see "Accounts, signup, multi-tenant login")
 
 ## UI language (what the owner sees — labels only, never rename tables)
 
@@ -113,13 +122,120 @@ install @prisma/client@7.9.1 && npx prisma generate` — then verify with
 `grep "get <modelName>" node_modules/.prisma/client/index.d.ts` before
 trusting `tsc`/the dev server. Always restart the dev server after.
 
-## Local login
+## Accounts, signup, multi-tenant login
 
-Seeded owner login: aryaadkoli@gmail.com / Password#123 (SEED_ADMIN_PASSWORD
-in .env). prisma/seed.ts renames the existing user in place (by id) if it
-still has an old email rather than creating a duplicate account — same
-pattern as upsertTag's rename-safe lookup — so re-seeding after changing
-this is safe.
+Login identity was split from tenant membership (migration
+20260811120000_account_tenant_membership_split): `Account` is the global
+email+password; `User` is now a pure membership row (tenantId + accountId
++ role, unique on [tenantId, accountId]) with no email/password of its
+own. This is what makes "one email, several businesses, pick one after
+login" possible — same Account, two User rows.
+
+- **Sign in** (auth.ts `authorize()`): looks up Account by email, checks
+  the password, then loads ALL of that Account's User memberships
+  (tenantId + tenant name + role each). The JWT carries the full
+  membership list (`token.memberships`) plus, once chosen,
+  `tenantId`/`userId`/`role` for the active one.
+- **Auto-select**: exactly one membership → selected immediately at
+  sign-in, zero extra steps for the common case. Zero or 2+ memberships →
+  `tenantId` stays unset on the token.
+- **The gate** (`app/(dashboard)/layout.tsx`, via `requireAccountSession()`
+  in auth.ts): no tenant selected yet →
+  zero memberships → renders `NoTenantEmptyState` (full-screen, mascot,
+  "Create your own business" / sign out — no sidebar, since there's no
+  tenant to show one for) right there, no redirect;
+  2+ memberships → `redirect("/select-tenant")`.
+- **`/select-tenant`**: the "modern, different kind of dashboard" —
+  full-screen card grid, one card per Tenant (name + role), each a
+  `<form>` whose Server Action calls `unstable_update({ user: { tenantId
+  } })` (fires auth.ts's `jwt()` callback with `trigger: "update"`,
+  re-selecting the token's active tenant WITHOUT a full re-login) then
+  redirects to `/`. Also reachable any time (not just when ambiguous) via
+  the sidebar's "Switch business" link (shown whenever `memberships.length
+  > 1`), so someone already in a tenant can hop to another one.
+  `requireSession()` (the one nearly every route/page calls) is
+  unchanged in shape — it just now additionally throws "No tenant
+  selected" if reached before a tenant is chosen; in practice the layout
+  gate means that never happens for a real page load.
+- **`/signup`** (`lib/accounts.ts` `signupNewBusiness`): creates a new
+  Tenant (slug auto-generated + de-duped from the business name) and
+  either a brand-new Account or, if that email already has one AND the
+  password matches, adds this as a SECOND membership on the existing
+  Account (exactly the "add another business to my login" case) —
+  password mismatch is rejected with a clear error, never silently
+  overwrites. Signs them in immediately after (same `signIn()` +
+  `redirect()` shape as the login page's own server action). Public route
+  (proxy.ts `PUBLIC_PATHS`).
+- **Settings → "Add teammate"** (`app/api/users/route.ts`,
+  `lib/accounts.ts` `getOrCreateAccountForInvite`): if the invited email
+  already has an Account, just adds a new membership under it (their
+  existing password keeps working, they may now need to pick a tenant
+  next login) — the owner's typed "temporary password" is ignored in that
+  case, not applied. Only genuinely new emails get a fresh Account with
+  that temp password.
+- **Emails** (`lib/mailer.ts`, Gmail SMTP via nodemailer): welcome-on-signup
+  and added-to-a-business notifications, sent from `GMAIL_USER` (the owner
+  said aryaadkoli@gmail.com for now, a proper business Gmail later — just
+  swap `GMAIL_USER`/`GMAIL_APP_PASSWORD` in .env when that's ready). Falls
+  back to `console.log`-ing the email when those env vars aren't set —
+  verified live this way (both signup and add-teammate mock emails printed
+  correctly with the right recipient/content). To make it real: Google
+  Account → Security → 2-Step Verification → App passwords → generate one
+  for "Mail" → `GMAIL_APP_PASSWORD` in .env (16 chars, no spaces).
+- **Password change** (`/api/users/me/password`) now targets Account, not
+  User — correctly account-wide, not per-tenant-membership.
+- **Session hardening** (asked "does the JWT expire, is there a refresh
+  token, make it as secure as possible" — answered inline: JWT strategy
+  was already in place from day one, nothing to newly "implement" there):
+  explicit `session.maxAge` (14 days) + `updateAge` (12h) in auth.ts —
+  previously relied on NextAuth's implicit defaults (30 days/24h),
+  now a deliberate, documented choice. No separate refresh-token grant
+  exists (that's an OAuth-provider concept) — NextAuth's own rolling
+  JWT re-issue on activity is the credentials-provider equivalent, and is
+  what updateAge controls. Verified live: the actual session cookie's
+  expiry timestamp matches the 14-day config exactly.
+- **Brute-force protection** (`lib/rate-limit.ts`) — a small Redis-backed
+  fixed-window counter (`INCR` + `EXPIRE` on first hit), reusing the
+  same Redis instance BullMQ already needs, no new infra. Applied to
+  login (`auth.ts` authorize(), keyed per email) and password-change
+  (keyed per accountId): 5 attempts/15 minutes, 6th+ rejected outright —
+  a throttled attempt returns the identical generic error as a wrong
+  password so the throttle itself isn't detectable. Verified live: sent
+  7 wrong-password attempts, confirmed the Redis counter incremented to
+  7 with a live TTL, then confirmed the CORRECT password was ALSO
+  rejected while still rate-limited (the actual test that matters, not
+  just "wrong passwords fail") — then cleared the counter and confirmed
+  login works normally again.
+
+Verified live end-to-end: multi-membership login correctly leaves
+`tenantId` null with both memberships listed; `/` correctly redirects to
+`/select-tenant` in that state and correctly renders the empty state
+(200, no redirect) for a zero-membership login instead; the pure
+tenant-selection logic (`selectTenant()` in auth.ts, including rejecting
+an unknown/tampered tenantId) verified directly since replaying a real
+click through Next's Server Action RSC wire format isn't feasible via
+curl (no browser available in this environment — this one piece relies
+on NextAuth's documented `unstable_update` pattern + the isolated logic
+test rather than a full click-through); signup verified by exercising the
+real `signupNewBusiness()` function directly (creates Account+Tenant+User,
+logs the correct welcome email) then confirming that exact email/password
+logs in successfully with a single auto-selected tenant and the dashboard
+renders immediately, no picker; add-teammate re-verified against the new
+Account model end to end. All test accounts/tenants cleaned up after.
+
+**Seeded logins** (prisma/seed.ts, SEED_ADMIN_PASSWORD in .env, default
+`Password#123`):
+- `aryaadkoli@gmail.com` — OWNER of two tenants (Surabharati, and
+  Surabharati Energy — the electricity/smart-meters business from the
+  earlier "we'll need a separate tenant" conversation). Logging in lands
+  on `/select-tenant`.
+- `admin@autobot.local` — zero memberships, for reviewing the empty state.
+
+`upsertAccount()`/`upsertMembership()` in seed.ts are idempotent
+(update-in-place on re-seed, matching the existing rename-safe pattern
+used elsewhere in that file), so re-running `npx prisma db seed` after
+someone changes a password through the app resets it back to
+SEED_ADMIN_PASSWORD.
 
 ## Roadmap and current status
 
@@ -267,6 +383,35 @@ this is safe.
     Honestly shows 0%/— for delivered/read until WhatsApp is really
     connected (mock sends never get delivery webhooks) instead of faking a
     number. Verified live with a real 9-contact campaign, then cleaned up.
+    Extended with two more sections once the workflow engine landed: "Top
+    templates by volume" (sent/delivered/failed grouped by templateId) and
+    "Workflow outcomes" (per workflow — how many leads are still active vs
+    which named outcome they landed on, walking currentStepId back to its
+    definition's outcome label via core/workflow/outcome-label.ts — shared
+    by Analytics, the Lead detail page, and the Lead detail modal's API
+    route, not reimplemented three times). Overview page
+    (app/(dashboard)/page.tsx) also de-placeholdered: "This week" (delivery/
+    reply/click rate, 7-day window) and "Recent activity" (last 8 real
+    Events, reusing contacts/event-meta.ts's label/dot-color helpers) used
+    to be permanently "Soon" placeholders with fake copy — now real
+    queries, verified live with a real campaign send (9/9 sent, 0%
+    delivered as expected since mock sends never get delivery webhooks,
+    correct nonzero reply rate from genuine historical event data), then
+    cleaned up.
+    More small real-data additions: Templates page shows a "Sent" column
+    per template (hover for delivered/failed breakdown) instead of no
+    usage visibility at all. Lead detail (both the full page and the
+    quick-view modal used from the Leads list, plus its API route) now
+    shows a "Workflows" section — which workflow(s) this lead is/was in
+    and their status or reached outcome — closing the last "Soon"
+    placeholder that wasn't actually true anymore (the old copy said
+    "once imports and workflows are running" — they now are). Self-service
+    password change added to the Account modal (PATCH
+    /api/users/me/password, verifies current password via bcrypt.compare
+    first) — replaced "password reset... coming soon"; notification
+    preferences is the one honestly-still-future item left there.
+    Verified live: wrong-current-password rejected, correct change
+    accepted, logged in with the new password, changed it back.
     ALSO DONE: ScheduledCampaign — "on this
     date, send this template to this tag/stage" — picked up automatically
     by an in-process poller (instrumentation.ts, SCHEDULER_INTERVAL_MS env

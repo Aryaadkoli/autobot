@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
 import { normalizePhone } from "@/lib/phone";
+import { outcomeLabelFromDefinition } from "@/core/workflow/outcome-label";
 import { LeadInputSchema, assertTagsBelongToTenant } from "../schema";
 
 export async function GET(
@@ -24,11 +25,19 @@ export async function GET(
     return Response.json({ error: "Lead not found" }, { status: 404 });
   }
 
-  const events = await prisma.event.findMany({
-    where: { tenantId: session.tenantId, contactId: id },
-    orderBy: { occurredAt: "desc" },
-    take: 50,
-  });
+  const [events, instances] = await Promise.all([
+    prisma.event.findMany({
+      where: { tenantId: session.tenantId, contactId: id },
+      orderBy: { occurredAt: "desc" },
+      take: 50,
+    }),
+    prisma.sequenceInstance.findMany({
+      where: { tenantId: session.tenantId, contactId: id },
+      orderBy: { startedAt: "desc" },
+      take: 5,
+      include: { workflow: { select: { name: true, definition: true } } },
+    }),
+  ]);
 
   return Response.json({
     contact: {
@@ -43,6 +52,15 @@ export async function GET(
       id: e.id,
       type: e.type,
       occurredAt: e.occurredAt,
+    })),
+    workflows: instances.map((inst) => ({
+      id: inst.id,
+      name: inst.workflow.name,
+      status: inst.status,
+      outcome:
+        inst.status === "COMPLETED"
+          ? outcomeLabelFromDefinition(inst.workflow.definition, inst.currentStepId)
+          : null,
     })),
   });
 }

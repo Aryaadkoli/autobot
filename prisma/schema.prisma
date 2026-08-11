@@ -56,17 +56,36 @@ enum Plan {
   PAID
 }
 
-model User {
+// The login identity — one email, one password, global (not per-tenant).
+// A person signs in as an Account, then picks (or is auto-placed into) a
+// Tenant via their User memberships below. This is what makes "one email,
+// several businesses" possible: aryaadkoli@gmail.com can be OWNER of one
+// Tenant and ADMIN of another via two separate User rows sharing this one
+// Account, instead of two disconnected logins with separate passwords.
+model Account {
   id           String   @id @default(cuid())
-  tenantId     String
-  tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  email        String
+  email        String   @unique
   passwordHash String
   name         String
-  role         Role     @default(ADMIN)
   createdAt    DateTime @default(now())
 
-  @@unique([tenantId, email])
+  memberships User[]
+}
+
+// One person's membership in one Tenant — the role they hold there. All
+// the "who can do what" checks (session.role, requireSession().tenantId)
+// still key off this row exactly as before; only identity moved out to
+// Account.
+model User {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id])
+  role      Role     @default(ADMIN)
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, accountId])
 }
 
 enum Role {

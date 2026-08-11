@@ -1,5 +1,6 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { outcomeLabelFromDefinition } from "@/core/workflow/outcome-label";
 import AnalyticsClient from "./analytics-client";
 
 // All queries below filter by tenantId (session.tenantId) — non-negotiable
@@ -9,31 +10,48 @@ import AnalyticsClient from "./analytics-client";
 export default async function AnalyticsPage() {
   const { tenantId } = await requireSession();
 
-  const [statusGroups, tenant, campaigns, trendRows] = await Promise.all([
-    prisma.message.groupBy({
-      by: ["status"],
-      where: { tenantId },
-      _count: { _all: true },
-      _sum: { costPaise: true },
-    }),
-    prisma.tenant.findUniqueOrThrow({
-      where: { id: tenantId },
-      select: { waPhoneNumberId: true, waAccessTokenEnc: true },
-    }),
-    prisma.campaign.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: "desc" },
-      take: 8,
-      include: { template: { select: { name: true } } },
-    }),
-    prisma.$queryRaw<{ day: Date; count: bigint }[]>`
-      SELECT date_trunc('day', "createdAt") AS day, count(*)::bigint AS count
-      FROM "Message"
-      WHERE "tenantId" = ${tenantId} AND "createdAt" >= NOW() - INTERVAL '14 days'
-      GROUP BY day
-      ORDER BY day ASC
-    `,
-  ]);
+  const [statusGroups, tenant, campaigns, trendRows, templateGroups, workflowsWithInstances, templateNames] =
+    await Promise.all([
+      prisma.message.groupBy({
+        by: ["status"],
+        where: { tenantId },
+        _count: { _all: true },
+        _sum: { costPaise: true },
+      }),
+      prisma.tenant.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: { waPhoneNumberId: true, waAccessTokenEnc: true },
+      }),
+      prisma.campaign.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: "desc" },
+        take: 8,
+        include: { template: { select: { name: true } } },
+      }),
+      prisma.$queryRaw<{ day: Date; count: bigint }[]>`
+        SELECT date_trunc('day', "createdAt") AS day, count(*)::bigint AS count
+        FROM "Message"
+        WHERE "tenantId" = ${tenantId} AND "createdAt" >= NOW() - INTERVAL '14 days'
+        GROUP BY day
+        ORDER BY day ASC
+      `,
+      prisma.message.groupBy({
+        by: ["templateId", "status"],
+        where: { tenantId, templateId: { not: null } },
+        _count: { _all: true },
+      }),
+      prisma.workflow.findMany({
+        where: { tenantId },
+        select: {
+          id: true,
+          name: true,
+          definition: true,
+          instances: { select: { status: true, currentStepId: true } },
+        },
+      }),
+      prisma.messageTemplate.findMany({ where: { tenantId }, select: { id: true, name: true } }),
+    ]);
+  const templateNameById = Object.fromEntries(templateNames.map((t) => [t.id, t.name]));
 
   const counts = Object.fromEntries(
     statusGroups.map((g) => [g.status, g._count._all])
@@ -66,6 +84,57 @@ export default async function AnalyticsPage() {
 
   const isLiveConnected = Boolean(tenant.waPhoneNumberId && tenant.waAccessTokenEnc);
 
+  // Top templates by volume — same status buckets as the headline cards,
+  // just grouped per template instead of tenant-wide.
+  const perTemplate = new Map<string, { sent: number; delivered: number; failed: number }>();
+  for (const g of templateGroups) {
+    if (!g.templateId) continue;
+    const row = perTemplate.get(g.templateId) ?? { sent: 0, delivered: 0, failed: 0 };
+    const n = g._count._all;
+    if (g.status === "SENT") row.sent += n;
+    else if (g.status === "DELIVERED" || g.status === "READ") {
+      row.sent += n;
+      row.delivered += n;
+    } else if (g.status === "FAILED") {
+      row.sent += n;
+      row.failed += n;
+    }
+    perTemplate.set(g.templateId, row);
+  }
+  const topTemplates = Array.from(perTemplate.entries())
+    .map(([templateId, stats]) => ({
+      name: templateNameById[templateId] ?? "(deleted template)",
+      ...stats,
+    }))
+    .sort((a, b) => b.sent - a.sent)
+    .slice(0, 5);
+
+  // Workflow outcomes — walks each workflow's finished instances back to
+  // the "end" step definition to get a human label.
+  const workflowOutcomes = workflowsWithInstances
+    .filter((w) => w.instances.length > 0)
+    .map((w) => {
+      const active = w.instances.filter((i) => i.status === "ACTIVE").length;
+      const outcomeCounts = new Map<string, number>();
+      let otherEnded = 0;
+      for (const inst of w.instances) {
+        if (inst.status === "COMPLETED") {
+          const label = outcomeLabelFromDefinition(w.definition, inst.currentStepId);
+          outcomeCounts.set(label, (outcomeCounts.get(label) ?? 0) + 1);
+        } else if (inst.status !== "ACTIVE") {
+          otherEnded++; // pivoted / cancelled / suppressed
+        }
+      }
+      return {
+        id: w.id,
+        name: w.name,
+        total: w.instances.length,
+        active,
+        otherEnded,
+        outcomes: Array.from(outcomeCounts.entries()).map(([label, count]) => ({ label, count })),
+      };
+    });
+
   return (
     <div>
       <h1 className="text-2xl font-semibold text-stone-900 mb-2">Analytics</h1>
@@ -93,6 +162,8 @@ export default async function AnalyticsPage() {
           skippedCount: c.skippedCount,
           createdAt: c.createdAt.toISOString(),
         }))}
+        topTemplates={topTemplates}
+        workflowOutcomes={workflowOutcomes}
       />
     </div>
   );

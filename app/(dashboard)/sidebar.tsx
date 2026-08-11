@@ -12,6 +12,7 @@ export default function Sidebar({
   userName,
   userEmail,
   userRole,
+  canSwitchTenant,
   nav,
   logoutAction,
 }: {
@@ -19,6 +20,7 @@ export default function Sidebar({
   userName: string;
   userEmail: string;
   userRole: string;
+  canSwitchTenant?: boolean;
   nav: NavItem[];
   logoutAction: () => Promise<void>;
 }) {
@@ -39,6 +41,14 @@ export default function Sidebar({
             <div className="text-xs text-amber-400 mt-0.5 truncate">
               {tenantName}
             </div>
+            {canSwitchTenant && (
+              <Link
+                href="/select-tenant"
+                className="text-[10px] text-stone-500 hover:text-stone-300 hover:underline"
+              >
+                Switch business
+              </Link>
+            )}
           </div>
         )}
         <button

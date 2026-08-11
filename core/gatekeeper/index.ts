@@ -1,5 +1,6 @@
 import type { Contact, MessageTemplate, Tenant } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { hoursAgo } from "@/lib/dates";
 import { currentHourInTimezone, isWithinQuietHours } from "./quiet-hours";
 
 export type GateDecision =
@@ -41,7 +42,7 @@ export async function canSend({
     };
   }
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const since = hoursAgo(24);
   const recentCount = await prisma.message.count({
     where: { contactId: contact.id, createdAt: { gte: since }, status: { not: "FAILED" } },
   });

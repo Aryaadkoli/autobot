@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { Contact, MessageTemplate, Tenant } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { hoursAgo } from "@/lib/dates";
 import { renderAndSend } from "./render-send";
 import { currentHourInTimezone, isWithinQuietHours } from "../gatekeeper/quiet-hours";
 
@@ -43,7 +44,7 @@ export async function sendTemplateToContact({
     };
   }
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const since = hoursAgo(24);
   const recentCount = await prisma.message.count({
     where: {
       contactId: contact.id,
