@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 import { TemplateInputSchema } from "../schema";
 
 export async function PATCH(
@@ -13,6 +14,8 @@ export async function PATCH(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "TEMPLATES", "edit");
+  if (denied) return denied;
   const { id } = await params;
 
   const existing = await prisma.messageTemplate.findFirst({
@@ -88,6 +91,8 @@ export async function DELETE(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "TEMPLATES", "edit");
+  if (denied) return denied;
   const { id } = await params;
 
   const existing = await prisma.messageTemplate.findFirst({

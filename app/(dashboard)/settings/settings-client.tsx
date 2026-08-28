@@ -5,15 +5,21 @@ import { useRouter } from "next/navigation";
 import UserModal from "./user-modal";
 
 type TeamUser = { id: string; name: string; email: string; role: string };
+type AssignableRole = { id: string; name: string };
 
+// Only rendered for someone with view access to the TEAM module (see
+// settings/page.tsx) — canEdit controls whether they can act on it or
+// are just looking (e.g. a role with TEAM view but not edit).
 export default function SettingsClient({
   users,
+  assignableRoles,
   currentUserId,
-  isOwner,
+  canEdit,
 }: {
   users: TeamUser[];
+  assignableRoles: AssignableRole[];
   currentUserId: string;
-  isOwner: boolean;
+  canEdit: boolean;
 }) {
   const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
@@ -47,7 +53,7 @@ export default function SettingsClient({
     <div>
       <div className="flex items-center justify-between mb-4 max-w-2xl">
         <h2 className="text-sm font-medium text-stone-700">Team members</h2>
-        {isOwner && (
+        {canEdit && (
           <button
             onClick={() => setShowAdd(true)}
             className="rounded-lg bg-stone-900 text-white text-sm px-3 py-1.5 hover:bg-stone-800 cursor-pointer"
@@ -64,9 +70,7 @@ export default function SettingsClient({
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Role</th>
-              {isOwner && (
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
-              )}
+              <th className="px-4 py-3 font-medium text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -84,33 +88,26 @@ export default function SettingsClient({
                     {u.role}
                   </span>
                 </td>
-                {isOwner && (
-                  <td className="px-4 py-3 text-right">
-                    {u.id !== currentUserId && (
-                      <button
-                        disabled={deletingId === u.id}
-                        onClick={() => handleDelete(u)}
-                        className="text-xs text-red-600 hover:underline cursor-pointer disabled:opacity-50"
-                      >
-                        {deletingId === u.id ? "Removing…" : "Remove"}
-                      </button>
-                    )}
-                  </td>
-                )}
+                <td className="px-4 py-3 text-right">
+                  {canEdit && u.id !== currentUserId && (
+                    <button
+                      disabled={deletingId === u.id}
+                      onClick={() => handleDelete(u)}
+                      className="text-xs text-red-600 hover:underline cursor-pointer disabled:opacity-50"
+                    >
+                      {deletingId === u.id ? "Removing…" : "Remove"}
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {!isOwner && (
-        <p className="text-xs text-stone-500 mt-3 max-w-2xl">
-          Only the account owner can add or remove teammates.
-        </p>
-      )}
-
       {showAdd && (
         <UserModal
+          assignableRoles={assignableRoles}
           onClose={() => setShowAdd(false)}
           onSaved={() => {
             setShowAdd(false);

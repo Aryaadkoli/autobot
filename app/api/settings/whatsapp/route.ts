@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
+import { requirePermission } from "@/lib/permissions";
 
 const WhatsAppSettingsSchema = z.object({
   phoneNumberId: z.string().trim().min(1, "Phone Number ID is required").max(100),
@@ -16,6 +17,8 @@ export async function GET() {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "SETTINGS", "view");
+  if (denied) return denied;
 
   const tenant = await prisma.tenant.findUniqueOrThrow({
     where: { id: session.tenantId },
@@ -38,12 +41,8 @@ export async function POST(req: Request) {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  if (session.role !== "OWNER") {
-    return Response.json(
-      { error: "Only the account owner can connect WhatsApp" },
-      { status: 403 }
-    );
-  }
+  const denied = requirePermission(session, "SETTINGS", "edit");
+  if (denied) return denied;
 
   const parsed = WhatsAppSettingsSchema.safeParse(await req.json());
   if (!parsed.success) {
@@ -74,12 +73,8 @@ export async function DELETE() {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  if (session.role !== "OWNER") {
-    return Response.json(
-      { error: "Only the account owner can disconnect WhatsApp" },
-      { status: 403 }
-    );
-  }
+  const denied = requirePermission(session, "SETTINGS", "edit");
+  if (denied) return denied;
 
   await prisma.tenant.update({
     where: { id: session.tenantId },

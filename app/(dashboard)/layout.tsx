@@ -1,18 +1,30 @@
 import { redirect } from "next/navigation";
 import { signOut, requireAccountSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { canView, type PermissionMap } from "@/lib/permissions";
 import Sidebar from "./sidebar";
 import NoTenantEmptyState from "./no-tenant-empty-state";
 
-const nav = [
-  { href: "/", label: "Overview" },
-  { href: "/contacts", label: "Leads" },
-  { href: "/workflows", label: "Workflows" },
-  { href: "/templates", label: "Templates" },
-  { href: "/campaigns", label: "Campaigns" },
-  { href: "/analytics", label: "Analytics" },
-  { href: "/settings", label: "Settings" },
-];
+// Overview has no module of its own — it's a summary of several, so
+// everyone with a tenant sees it. Everything else is hidden entirely
+// (not just disabled) when the signed-in role can't view that module —
+// no point linking to a page that'll show nothing.
+function navFor(permissions: PermissionMap) {
+  const items = [
+    { href: "/", label: "Overview", show: true },
+    { href: "/contacts", label: "Leads", show: canView(permissions, "LEADS") },
+    { href: "/workflows", label: "Workflows", show: canView(permissions, "WORKFLOWS") },
+    { href: "/templates", label: "Templates", show: canView(permissions, "TEMPLATES") },
+    { href: "/campaigns", label: "Campaigns", show: canView(permissions, "CAMPAIGNS") },
+    { href: "/analytics", label: "Analytics", show: canView(permissions, "ANALYTICS") },
+    {
+      href: "/settings",
+      label: "Settings",
+      show: canView(permissions, "SETTINGS") || canView(permissions, "TEAM"),
+    },
+  ];
+  return items.filter((i) => i.show).map(({ href, label }) => ({ href, label }));
+}
 
 export default async function DashboardLayout({
   children,
@@ -49,7 +61,7 @@ export default async function DashboardLayout({
         userEmail={account.email}
         userRole={account.role ?? ""}
         canSwitchTenant={account.memberships.length > 1}
-        nav={nav}
+        nav={navFor(account.permissions)}
         logoutAction={logout}
       />
 

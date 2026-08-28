@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 import { enroll } from "@/core/workflow/engine";
 
 const BodySchema = z.object({
@@ -18,6 +19,8 @@ export async function POST(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "WORKFLOWS", "edit");
+  if (denied) return denied;
   const { id } = await params;
 
   const workflow = await prisma.workflow.findFirst({

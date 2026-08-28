@@ -1,5 +1,7 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { canView } from "@/lib/permissions";
+import NoModuleAccess from "../no-module-access";
 import { outcomeLabelFromDefinition } from "@/core/workflow/outcome-label";
 import AnalyticsClient from "./analytics-client";
 
@@ -8,7 +10,9 @@ import AnalyticsClient from "./analytics-client";
 // Message/Event/Campaign rows every other part of the app already writes,
 // no new data collection needed.
 export default async function AnalyticsPage() {
-  const { tenantId } = await requireSession();
+  const session = await requireSession();
+  const { tenantId } = session;
+  if (!canView(session.permissions, "ANALYTICS")) return <NoModuleAccess />;
 
   const [statusGroups, tenant, campaigns, trendRows, templateGroups, workflowsWithInstances, templateNames] =
     await Promise.all([

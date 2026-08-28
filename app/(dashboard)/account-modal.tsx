@@ -65,7 +65,7 @@ export default function AccountModal({
         ))}
       </div>
 
-      {userRole === "OWNER" && (
+      {(userRole === "OWNER" || userRole === "CO_OWNER") && (
         <Link
           href="/settings"
           onClick={onClose}

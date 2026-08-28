@@ -1,9 +1,13 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { canView } from "@/lib/permissions";
+import NoModuleAccess from "../no-module-access";
 import TemplatesClient from "./templates-client";
 
 export default async function TemplatesPage() {
-  const { tenantId } = await requireSession();
+  const session = await requireSession();
+  const { tenantId } = session;
+  if (!canView(session.permissions, "TEMPLATES")) return <NoModuleAccess />;
 
   const [templates, leads, sendGroups] = await Promise.all([
     prisma.messageTemplate.findMany({

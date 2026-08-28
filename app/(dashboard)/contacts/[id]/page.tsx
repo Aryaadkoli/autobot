@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { canView } from "@/lib/permissions";
+import NoModuleAccess from "../../no-module-access";
 import { outcomeLabelFromDefinition } from "@/core/workflow/outcome-label";
 import StageBadge from "../stage-badge";
 import { formatAttributeLabel, visibleAttributes } from "../attributes";
@@ -12,7 +14,9 @@ export default async function LeadDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { tenantId } = await requireSession();
+  const session = await requireSession();
+  const { tenantId } = session;
+  if (!canView(session.permissions, "LEADS")) return <NoModuleAccess />;
   const { id } = await params;
 
   const contact = await prisma.contact.findFirst({

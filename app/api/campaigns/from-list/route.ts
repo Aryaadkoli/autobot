@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 import { importContacts } from "@/core/ingestion/upsert";
 import { runCampaign } from "@/core/channels/campaign";
 
@@ -19,6 +20,8 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "CAMPAIGNS", "edit");
+  if (denied) return denied;
 
   const parsed = BodySchema.safeParse(await req.json());
   if (!parsed.success) {

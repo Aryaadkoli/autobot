@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 
 const BodySchema = z.object({
   dailyCapPerContact: z.coerce.number().int().min(1).max(50),
@@ -15,12 +16,8 @@ export async function PATCH(req: Request) {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (session.role !== "OWNER") {
-    return Response.json(
-      { error: "Only the account owner can change sending limits" },
-      { status: 403 }
-    );
-  }
+  const denied = requirePermission(session, "SETTINGS", "edit");
+  if (denied) return denied;
 
   const parsed = BodySchema.safeParse(await req.json());
   if (!parsed.success) {

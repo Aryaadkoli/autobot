@@ -1,0 +1,81 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: autobot
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: autobot
+      # Deliberately no TZ override — stays UTC (Postgres's own default).
+      # A non-UTC container timezone plus this app's naive-timestamp
+      # DateTime columns is a real footgun found and documented during
+      # Step 2's testing (core/channels/campaign.ts's due-date checks).
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autobot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      target: web
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://autobot:${DB_PASSWORD}@postgres:5432/autobot
+      REDIS_URL: redis://redis:6379
+    volumes:
+      # Template image/PDF uploads (app/api/templates/upload/route.ts)
+      # are written to public/uploads at runtime — without this volume
+      # they'd live only in this container's writable layer and be lost
+      # on every redeploy (`docker compose up --build` replaces the
+      # container from a fresh image). Named volume persists them
+      # across rebuilds; only `web` needs it (worker never reads
+      # uploaded files — Meta fetches them by public URL, not from disk).
+      - uploads:/app/public/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      target: worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://autobot:${DB_PASSWORD}@postgres:5432/autobot
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on: [web]
+    restart: unless-stopped
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  caddydata: {}
+  caddyconfig: {}
+  uploads: {}

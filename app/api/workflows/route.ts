@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 import { WorkflowDefinitionSchema, validateWorkflowDefinition } from "@/core/workflow/schema";
 
 const BodySchema = z.object({
@@ -16,6 +17,8 @@ export async function GET() {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "WORKFLOWS", "view");
+  if (denied) return denied;
 
   const workflows = await prisma.workflow.findMany({
     where: { tenantId: session.tenantId },
@@ -36,6 +39,8 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied2 = requirePermission(session, "WORKFLOWS", "edit");
+  if (denied2) return denied2;
 
   const parsed = BodySchema.safeParse(await req.json());
   if (!parsed.success) {

@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
 import { sendAccountEmail } from "./mailer";
+import { createSystemRoles } from "./roles";
 
 // Shared by /api/signup and Settings' "add teammate" — both ultimately
 // need "find or create the global Account for this email," they just
@@ -67,7 +68,10 @@ export async function signupNewBusiness({
   }
 
   const tenant = await prisma.tenant.create({ data: { name: businessName, slug } });
-  await prisma.user.create({ data: { tenantId: tenant.id, accountId: account.id, role: "OWNER" } });
+  const roles = await createSystemRoles(tenant.id);
+  await prisma.user.create({
+    data: { tenantId: tenant.id, accountId: account.id, roleId: roles.OWNER.id },
+  });
 
   await sendAccountEmail(
     email,

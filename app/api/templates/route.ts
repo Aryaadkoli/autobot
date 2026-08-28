@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 import { TemplateInputSchema } from "./schema";
 
 export async function GET() {
@@ -10,6 +11,8 @@ export async function GET() {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "TEMPLATES", "view");
+  if (denied) return denied;
 
   const templates = await prisma.messageTemplate.findMany({
     where: { tenantId: session.tenantId },
@@ -26,6 +29,8 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "TEMPLATES", "edit");
+  if (denied) return denied;
 
   const parsed = TemplateInputSchema.safeParse(await req.json());
   if (!parsed.success) {

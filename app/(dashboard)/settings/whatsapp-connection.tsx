@@ -4,12 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function WhatsAppConnection({
-  isOwner,
+  canEdit,
   connected,
   phoneNumberId,
   businessAcctId,
 }: {
-  isOwner: boolean;
+  canEdit: boolean;
   connected: boolean;
   phoneNumberId: string | null;
   businessAcctId: string | null;
@@ -189,7 +189,7 @@ export default function WhatsAppConnection({
         </ol>
       )}
 
-      {!isOwner ? (
+      {!canEdit ? (
         <p className="text-xs text-stone-500 mt-4">
           Only the account owner can connect or change WhatsApp credentials.
         </p>

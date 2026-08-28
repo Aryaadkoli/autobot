@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 
 const TagInputSchema = z.object({
   name: z.string().trim().min(1, "Tag name is required").max(50),
@@ -17,6 +18,8 @@ export async function PATCH(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "LEADS", "edit");
+  if (denied) return denied;
   const { id } = await params;
 
   const tag = await prisma.tag.findFirst({
@@ -73,6 +76,8 @@ export async function DELETE(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "LEADS", "edit");
+  if (denied) return denied;
   const { id } = await params;
 
   const tag = await prisma.tag.findFirst({

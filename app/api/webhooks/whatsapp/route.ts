@@ -55,7 +55,11 @@ export async function POST(req: Request) {
   let payload: {
     entry?: {
       changes?: {
-        value?: { statuses?: MetaStatus[]; messages?: MetaInboundMessage[] };
+        value?: {
+          statuses?: MetaStatus[];
+          messages?: MetaInboundMessage[];
+          metadata?: { phone_number_id?: string };
+        };
       }[];
     }[];
   };
@@ -70,8 +74,25 @@ export async function POST(req: Request) {
       for (const status of change.value?.statuses ?? []) {
         await handleStatus(status);
       }
-      for (const message of change.value?.messages ?? []) {
-        await handleInboundMessage(message);
+      const inboundMessages = change.value?.messages ?? [];
+      if (inboundMessages.length === 0) continue;
+
+      // Every real Meta webhook payload carries which of OUR phone
+      // numbers received it (value.metadata.phone_number_id) — without
+      // this, looking a contact up by phone alone risks matching a
+      // different tenant's contact with the same phone number (phone is
+      // only unique per-tenant, not globally — see schema.prisma). This
+      // resolves which tenant owns the number before touching any data.
+      const phoneNumberId = change.value?.metadata?.phone_number_id;
+      if (!phoneNumberId) continue;
+      const tenant = await prisma.tenant.findFirst({
+        where: { waPhoneNumberId: phoneNumberId },
+        select: { id: true },
+      });
+      if (!tenant) continue; // not a number we know about
+
+      for (const message of inboundMessages) {
+        await handleInboundMessage(tenant.id, message);
       }
     }
   }
@@ -115,14 +136,16 @@ async function handleStatus(status: MetaStatus) {
   }
 }
 
-async function handleInboundMessage(message: MetaInboundMessage) {
+async function handleInboundMessage(tenantId: string, message: MetaInboundMessage) {
   const phone = normalizePhone(message.from);
   if (!phone) return;
 
-  // Inbound events aren't tenant-scoped by the payload itself — look up the
-  // contact by phone across... in a single-tenant-per-WABA setup each Meta
-  // app maps to one tenant's phone number, so phone is unique enough here.
-  const contact = await prisma.contact.findFirst({ where: { phone } });
+  // Scoped to the tenant that owns the receiving phone number (resolved
+  // by the caller from the webhook payload's metadata.phone_number_id)
+  // — phone numbers are only unique per-tenant (schema.prisma), so an
+  // unscoped lookup here could match a different tenant's contact that
+  // happens to share the same phone number.
+  const contact = await prisma.contact.findFirst({ where: { phone, tenantId } });
   if (!contact) return;
 
   const body = message.text?.body?.trim().toLowerCase() ?? "";

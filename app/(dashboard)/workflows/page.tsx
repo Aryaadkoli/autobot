@@ -1,5 +1,7 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { canView } from "@/lib/permissions";
+import NoModuleAccess from "../no-module-access";
 import WorkflowsClient from "./workflows-client";
 
 // Phase 4 — the real workflow engine (core/workflow/engine.ts): multi-step
@@ -10,7 +12,9 @@ import WorkflowsClient from "./workflows-client";
 // "Advanced" JSON mode is still there as an escape hatch for anything the
 // guided builder can't express.
 export default async function WorkflowsPage() {
-  const { tenantId } = await requireSession();
+  const session = await requireSession();
+  const { tenantId } = session;
+  if (!canView(session.permissions, "WORKFLOWS")) return <NoModuleAccess />;
 
   const [workflows, services, tags, templates] = await Promise.all([
     prisma.workflow.findMany({

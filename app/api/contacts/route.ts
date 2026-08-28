@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
 import { normalizePhone } from "@/lib/phone";
+import { requirePermission } from "@/lib/permissions";
 import { LeadInputSchema, assertTagsBelongToTenant } from "./schema";
 
 export async function POST(req: Request) {
@@ -11,6 +12,8 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "LEADS", "edit");
+  if (denied) return denied;
 
   const parsed = LeadInputSchema.safeParse(await req.json());
   if (!parsed.success) {
@@ -31,10 +34,15 @@ export async function POST(req: Request) {
   const tagError = await assertTagsBelongToTenant(tenantId, tagIds);
   if (tagError) return Response.json({ error: tagError }, { status: 400 });
 
+  // (tenantId, phone) is a real, unconditional unique constraint — a
+  // previously-deleted contact's phone number still physically occupies
+  // it (findUnique isn't soft-delete-filtered, so this sees it either
+  // way). A live match blocks creation as before; a soft-deleted match
+  // is resurrected instead of trying to insert a duplicate.
   const existing = await prisma.contact.findUnique({
     where: { tenantId_phone: { tenantId, phone } },
   });
-  if (existing) {
+  if (existing && !existing.deletedAt) {
     return Response.json(
       { error: "A lead with this phone number already exists" },
       { status: 409 }
@@ -58,15 +66,25 @@ export async function POST(req: Request) {
 
   let contact;
   try {
-    contact = await prisma.contact.create({
-      data: {
-        tenantId,
-        phone,
-        name: name && name.length > 0 ? name : null,
-        businessTypeId,
-        attributes,
-      },
-    });
+    contact = existing
+      ? await prisma.contact.update({
+          where: { id: existing.id },
+          data: {
+            name: name && name.length > 0 ? name : null,
+            businessTypeId,
+            attributes,
+            deletedAt: null,
+          },
+        })
+      : await prisma.contact.create({
+          data: {
+            tenantId,
+            phone,
+            name: name && name.length > 0 ? name : null,
+            businessTypeId,
+            attributes,
+          },
+        });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return Response.json(

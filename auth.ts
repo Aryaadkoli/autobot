@@ -3,7 +3,16 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { computePermissions, MODULES, type PermissionMap } from "@/lib/permissions";
 import type { Membership, AppJWT, AppSessionUser } from "@/types/next-auth";
+
+// Fallback used only if a session somehow reaches requireSession() with
+// no permissions on it (shouldn't happen post-login — kept as a safe
+// "no access to anything" default rather than risking `undefined`
+// crashing every canView()/canEdit() call site).
+const NO_PERMISSIONS: PermissionMap = Object.fromEntries(
+  MODULES.map((m) => [m, { canView: false, canEdit: false }])
+) as PermissionMap;
 
 // Central auth config. Everything security-related lives in this file.
 //
@@ -46,6 +55,16 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     maxAge: MAX_SESSION_DAYS * 24 * 60 * 60,
     updateAge: SESSION_REFRESH_HOURS * 60 * 60,
   },
+  // Required once this runs as a real `next start` production server, not
+  // `next dev` — without it NextAuth refuses every request with
+  // "UntrustedHost" (a real, tested finding: `npm run build && npm run
+  // start` throws this on the very first request). Safe here because the
+  // planned deployment (docs/BLUEPRINT.md) puts this behind a reverse
+  // proxy (Caddy) that Autobot's own server is the only thing sitting
+  // behind — nothing else can inject a fake Host header before it gets
+  // there. If that ever changes, set AUTH_URL explicitly instead (a fixed
+  // origin, not a trusted header) and drop this.
+  trustHost: true,
   pages: { signIn: "/login" },
   providers: [
     Credentials({
@@ -70,19 +89,22 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
 
         const memberships = await prisma.user.findMany({
           where: { accountId: account.id },
-          include: { tenant: { select: { name: true } } },
+          include: { tenant: { select: { name: true } }, role: { select: { id: true, name: true } } },
         });
 
         return {
           id: account.id,
           email: account.email,
           name: account.name,
-          memberships: memberships.map((m) => ({
-            userId: m.id,
-            tenantId: m.tenantId,
-            tenantName: m.tenant.name,
-            role: m.role,
-          })),
+          memberships: await Promise.all(
+            memberships.map(async (m) => ({
+              userId: m.id,
+              tenantId: m.tenantId,
+              tenantName: m.tenant.name,
+              role: m.role.name,
+              permissions: await computePermissions(m.role.id, m.role.name),
+            }))
+          ),
         };
       },
     }),
@@ -125,6 +147,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       user.id = t.userId ?? null;
       user.tenantId = t.tenantId ?? null;
       user.role = t.role ?? null;
+      user.permissions = t.permissions ?? null;
       user.memberships = t.memberships ?? [];
       user.name = t.name ?? null;
       user.email = t.email ?? "";
@@ -139,10 +162,12 @@ function selectTenant(token: AppJWT, tenantId: string | undefined, memberships: 
     token.tenantId = match.tenantId;
     token.userId = match.userId;
     token.role = match.role;
+    token.permissions = match.permissions;
   } else {
     token.tenantId = undefined;
     token.userId = undefined;
     token.role = undefined;
+    token.permissions = undefined;
   }
 }
 
@@ -159,6 +184,7 @@ export async function requireSession() {
     userId: session.user.id as string,
     tenantId,
     role: session.user.role as string,
+    permissions: session.user.permissions ?? NO_PERMISSIONS,
     name: session.user.name ?? "",
     email: session.user.email ?? "",
   };
@@ -175,6 +201,7 @@ export async function requireAccountSession() {
     email: session.user.email ?? "",
     tenantId: session.user.tenantId,
     role: session.user.role,
+    permissions: session.user.permissions ?? NO_PERMISSIONS,
     memberships: session.user.memberships ?? [],
   };
 }

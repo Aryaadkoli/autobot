@@ -1,5 +1,6 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 
 export async function DELETE(
   _req: Request,
@@ -11,6 +12,8 @@ export async function DELETE(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "CAMPAIGNS", "edit");
+  if (denied) return denied;
   const { id } = await params;
 
   const scheduled = await prisma.scheduledCampaign.findFirst({

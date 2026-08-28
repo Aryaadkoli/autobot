@@ -6,6 +6,16 @@ import PasswordInput from "../login/password-input";
 import SubmitButton from "../login/submit-button";
 import Mascot from "@/components/mascot";
 import { signupNewBusiness } from "@/lib/accounts";
+import { checkRateLimit } from "@/lib/rate-limit";
+
+// Same throttle shape as login/password-change (lib/rate-limit.ts) —
+// this endpoint was the one place left with no abuse protection at all:
+// unauthenticated, and signupNewBusiness()'s "wrong password for an
+// existing email" error also confirms whether an email is already
+// registered, which makes it scriptable for both spam-tenant creation
+// and account-existence probing without this.
+const SIGNUP_ATTEMPT_LIMIT = 5;
+const SIGNUP_ATTEMPT_WINDOW_SECONDS = 15 * 60;
 
 export default async function SignupPage({
   searchParams,
@@ -23,6 +33,15 @@ export default async function SignupPage({
 
     if (!businessName || !name || !email || password.length < 8) {
       redirect(`/signup?error=${encodeURIComponent("Fill in every field — password needs at least 8 characters.")}`);
+    }
+
+    const { allowed } = await checkRateLimit(
+      `signup:${email}`,
+      SIGNUP_ATTEMPT_LIMIT,
+      SIGNUP_ATTEMPT_WINDOW_SECONDS
+    );
+    if (!allowed) {
+      redirect(`/signup?error=${encodeURIComponent("Too many attempts — try again in a few minutes.")}`);
     }
 
     try {

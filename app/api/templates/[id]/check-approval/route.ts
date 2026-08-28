@@ -1,5 +1,6 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 import { decrypt } from "@/lib/crypto";
 import { checkTemplateApproval } from "@/core/channels/whatsapp";
 
@@ -15,6 +16,8 @@ export async function POST(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "TEMPLATES", "edit");
+  if (denied) return denied;
   const { id } = await params;
 
   const [template, tenant] = await Promise.all([

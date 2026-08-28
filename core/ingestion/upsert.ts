@@ -38,10 +38,14 @@ export async function importContacts({
   const contactIds = new Set<string>();
   let importedRows = 0;
 
+  // update: { deletedAt: null } for the same reason as the contact
+  // upsert below — upsert's `where` isn't soft-delete-filtered, so
+  // reusing a previously-deleted tag's name here must resurrect it,
+  // not silently update a hidden row.
   const bulkTag = tagName
     ? await prisma.tag.upsert({
         where: { tenantId_name: { tenantId, name: tagName } },
-        update: {},
+        update: { deletedAt: null },
         create: { tenantId, name: tagName },
       })
     : null;
@@ -84,12 +88,20 @@ export async function importContacts({
         ...mapped.attributes,
       };
 
+      // upsert's `where` matches by (tenantId, phone) regardless of
+      // deletedAt (only findMany/findFirst/count are soft-delete-filtered
+      // — see lib/db.ts), so re-importing a phone number that belongs to
+      // a previously-deleted contact hits the `update` branch on that
+      // deleted row. Clearing deletedAt here is deliberate: bringing a
+      // contact back via a real re-import is exactly what should
+      // resurrect it, rather than leaving it updated-but-still-hidden.
       const contact = await prisma.contact.upsert({
         where: { tenantId_phone: { tenantId, phone } },
         update: {
           ...(mapped.name ? { name: mapped.name } : {}),
           ...(businessTypeId ? { businessTypeId } : {}),
           attributes: mergedAttributes as Prisma.InputJsonValue,
+          deletedAt: null,
         },
         create: {
           tenantId,

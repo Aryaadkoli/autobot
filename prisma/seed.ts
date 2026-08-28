@@ -4,6 +4,7 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db";
 import type { EventType } from "@prisma/client";
+import { SYSTEM_ROLE_NAMES } from "../lib/roles";
 
 function daysAgo(days: number, hours = 0) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000 - hours * 60 * 60 * 1000);
@@ -39,11 +40,26 @@ async function upsertAccount(email: string, name: string, password: string) {
   });
 }
 
-async function upsertMembership(tenantId: string, accountId: string, role: "OWNER" | "ADMIN" | "AGENT") {
+// Idempotent — re-running `npx prisma db seed` must never duplicate a
+// tenant's system roles.
+async function ensureSystemRoles(tenantId: string) {
+  for (const name of SYSTEM_ROLE_NAMES) {
+    await prisma.role.upsert({
+      where: { tenantId_name: { tenantId, name } },
+      update: {},
+      create: { tenantId, name, isSystem: true },
+    });
+  }
+}
+
+async function upsertMembership(tenantId: string, accountId: string, roleName: "OWNER" | "CO_OWNER" | "MEMBER") {
+  const role = await prisma.role.findUniqueOrThrow({
+    where: { tenantId_name: { tenantId, name: roleName } },
+  });
   return prisma.user.upsert({
     where: { tenantId_accountId: { tenantId, accountId } },
-    update: { role },
-    create: { tenantId, accountId, role },
+    update: { roleId: role.id },
+    create: { tenantId, accountId, roleId: role.id },
   });
 }
 
@@ -70,6 +86,9 @@ async function main() {
       slug: "tenant-2",
     },
   });
+
+  await ensureSystemRoles(tenant.id);
+  await ensureSystemRoles(energyTenant.id);
 
   const seedPassword = process.env.SEED_ADMIN_PASSWORD ?? "changeme123";
 
@@ -282,7 +301,7 @@ async function main() {
 
     const contact = await prisma.contact.upsert({
       where: { tenantId_phone: { tenantId: tenant.id, phone: c.phone } },
-      update: { name: c.name, businessTypeId: c.businessTypeId, attributes },
+      update: { name: c.name, businessTypeId: c.businessTypeId, attributes, deletedAt: null },
       create: {
         tenantId: tenant.id,
         phone: c.phone,
@@ -410,7 +429,7 @@ async function main() {
   for (const c of energyContacts) {
     await prisma.contact.upsert({
       where: { tenantId_phone: { tenantId: energyTenant.id, phone: c.phone } },
-      update: { name: c.name, businessTypeId: meters.id },
+      update: { name: c.name, businessTypeId: meters.id, deletedAt: null },
       create: {
         tenantId: energyTenant.id,
         phone: c.phone,

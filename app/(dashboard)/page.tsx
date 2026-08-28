@@ -1,13 +1,28 @@
 import Link from "next/link";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { canView } from "@/lib/permissions";
 import Mascot from "@/components/mascot";
 import { STAGES } from "./contacts/stages";
 import { eventLabel, eventDotClass } from "./contacts/event-meta";
 import { hoursAgo } from "@/lib/dates";
 
 export default async function OverviewPage() {
-  const { tenantId, name } = await requireSession();
+  const session = await requireSession();
+  const { tenantId, name } = session;
+
+  // This page has no module of its own — it's a summary of several — so
+  // it's shown to everyone with a tenant. But its content genuinely
+  // includes other modules' data (lead names/phone numbers in the
+  // activity feed, message/campaign stats, workflow counts), so each
+  // section below is gated by, and its query skipped for, whichever
+  // module it actually belongs to. A role with LEADS view=false must
+  // never see a lead's name here just because this page has no gate of
+  // its own — that's a real leak this fixes (recentEvents used to
+  // include contact.name/phone unconditionally).
+  const seeLeads = canView(session.permissions, "LEADS");
+  const seeCampaigns = canView(session.permissions, "CAMPAIGNS");
+  const seeWorkflows = canView(session.permissions, "WORKFLOWS");
 
   const since24h = hoursAgo(24);
   const since7d = hoursAgo(7 * 24);
@@ -27,39 +42,53 @@ export default async function OverviewPage() {
       where: { id: tenantId },
       select: { name: true },
     }),
-    prisma.contact.count({ where: { tenantId } }),
-    prisma.message.count({ where: { tenantId, createdAt: { gte: since24h } } }),
-    prisma.sequenceInstance.count({ where: { tenantId, status: "ACTIVE" } }),
-    Promise.all(
-      STAGES.map((s) =>
-        prisma.contact.count({
-          where: { tenantId, attributes: { path: ["stage"], equals: s.value } },
+    seeLeads ? prisma.contact.count({ where: { tenantId } }) : Promise.resolve(0),
+    seeCampaigns
+      ? prisma.message.count({ where: { tenantId, createdAt: { gte: since24h } } })
+      : Promise.resolve(0),
+    seeWorkflows
+      ? prisma.sequenceInstance.count({ where: { tenantId, status: "ACTIVE" } })
+      : Promise.resolve(0),
+    seeLeads
+      ? Promise.all(
+          STAGES.map((s) =>
+            prisma.contact.count({
+              where: { tenantId, attributes: { path: ["stage"], equals: s.value } },
+            })
+          )
+        )
+      : Promise.resolve(STAGES.map(() => 0)),
+    seeLeads
+      ? prisma.tag.findMany({
+          where: { tenantId },
+          include: { _count: { select: { contacts: true } } },
+          orderBy: { contacts: { _count: "desc" } },
+          take: 5,
         })
-      )
-    ),
-    prisma.tag.findMany({
-      where: { tenantId },
-      include: { _count: { select: { contacts: true } } },
-      orderBy: { contacts: { _count: "desc" } },
-      take: 5,
-    }),
-    prisma.businessType.count({ where: { tenantId } }),
-    prisma.message.groupBy({
-      by: ["status"],
-      where: { tenantId, createdAt: { gte: since7d } },
-      _count: { _all: true },
-    }),
-    prisma.event.groupBy({
-      by: ["type"],
-      where: { tenantId, occurredAt: { gte: since7d }, type: { in: ["REPLIED", "LINK_CLICKED"] } },
-      _count: { _all: true },
-    }),
-    prisma.event.findMany({
-      where: { tenantId },
-      orderBy: { occurredAt: "desc" },
-      take: 8,
-      include: { contact: { select: { name: true, phone: true } } },
-    }),
+      : Promise.resolve([]),
+    seeLeads ? prisma.businessType.count({ where: { tenantId } }) : Promise.resolve(0),
+    seeCampaigns
+      ? prisma.message.groupBy({
+          by: ["status"],
+          where: { tenantId, createdAt: { gte: since7d } },
+          _count: { _all: true },
+        })
+      : Promise.resolve([]),
+    seeCampaigns
+      ? prisma.event.groupBy({
+          by: ["type"],
+          where: { tenantId, occurredAt: { gte: since7d }, type: { in: ["REPLIED", "LINK_CLICKED"] } },
+          _count: { _all: true },
+        })
+      : Promise.resolve([]),
+    seeLeads
+      ? prisma.event.findMany({
+          where: { tenantId },
+          orderBy: { occurredAt: "desc" },
+          take: 8,
+          include: { contact: { select: { name: true, phone: true } } },
+        })
+      : Promise.resolve([]),
   ]);
 
   const weekCounts = Object.fromEntries(
@@ -83,16 +112,18 @@ export default async function OverviewPage() {
   ];
 
   const stats = [
-    { label: "Leads", value: contacts },
-    { label: "Messages, last 24h", value: messages24h },
-    { label: "Active sequences", value: activeSequences },
+    ...(seeLeads ? [{ label: "Leads", value: contacts }] : []),
+    ...(seeCampaigns ? [{ label: "Messages, last 24h", value: messages24h }] : []),
+    ...(seeWorkflows ? [{ label: "Active sequences", value: activeSequences }] : []),
   ];
 
-  const quickActions = [
-    { href: "/contacts?new=1", label: "Add a lead" },
-    { href: "/contacts?import=1", label: "Import leads" },
-    { href: "/contacts", label: "View all leads" },
-  ];
+  const quickActions = seeLeads
+    ? [
+        { href: "/contacts?new=1", label: "Add a lead" },
+        { href: "/contacts?import=1", label: "Import leads" },
+        { href: "/contacts", label: "View all leads" },
+      ]
+    : [];
 
   const stageBreakdown = STAGES.map((s, i) => ({
     ...s,
@@ -156,135 +187,141 @@ export default async function OverviewPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <h2 className="text-sm font-medium text-stone-700 mb-3">
-                Leads by stage
-              </h2>
-              <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
-                {contacts === 0 ? (
-                  <p className="text-sm text-stone-500">
-                    No leads yet — add or import your first ones.
-                  </p>
-                ) : (
-                  stageBreakdown.map((s) => (
-                    <Link
-                      key={s.value}
-                      href={`/contacts?stage=${s.value}`}
-                      className="block group"
-                    >
-                      <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="text-stone-600 group-hover:text-stone-900">
-                          {s.label}
-                        </span>
-                        <span className="text-stone-500">{s.count}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-stone-100 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-amber-500/80 group-hover:bg-amber-500"
-                          style={{
-                            width: `${(s.count / maxStageCount) * 100}%`,
-                          }}
-                        />
-                      </div>
-                    </Link>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div>
-              <h2 className="text-sm font-medium text-stone-700 mb-3">
-                Top tags
-              </h2>
-              <div className="bg-white rounded-2xl border border-stone-200 p-5">
-                {usedTags.length === 0 ? (
-                  <p className="text-sm text-stone-500">
-                    No tags in use yet. Manage tags from the Leads page.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {usedTags.map((t) => (
-                      <span
-                        key={t.id}
-                        className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 text-xs border border-amber-200"
+          {seeLeads && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <h2 className="text-sm font-medium text-stone-700 mb-3">
+                  Leads by stage
+                </h2>
+                <div className="bg-white rounded-2xl border border-stone-200 p-5 space-y-3">
+                  {contacts === 0 ? (
+                    <p className="text-sm text-stone-500">
+                      No leads yet — add or import your first ones.
+                    </p>
+                  ) : (
+                    stageBreakdown.map((s) => (
+                      <Link
+                        key={s.value}
+                        href={`/contacts?stage=${s.value}`}
+                        className="block group"
                       >
-                        {t.name} · {t._count.contacts}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <p className="text-xs text-stone-400 mt-4">
-                  {businessTypeCount} business type
-                  {businessTypeCount === 1 ? "" : "s"} in use across your
-                  leads.
-                </p>
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <span className="text-stone-600 group-hover:text-stone-900">
+                            {s.label}
+                          </span>
+                          <span className="text-stone-500">{s.count}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-stone-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-amber-500/80 group-hover:bg-amber-500"
+                            style={{
+                              width: `${(s.count / maxStageCount) * 100}%`,
+                            }}
+                          />
+                        </div>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h2 className="text-sm font-medium text-stone-700 mb-3">
+                  Top tags
+                </h2>
+                <div className="bg-white rounded-2xl border border-stone-200 p-5">
+                  {usedTags.length === 0 ? (
+                    <p className="text-sm text-stone-500">
+                      No tags in use yet. Manage tags from the Leads page.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {usedTags.map((t) => (
+                        <span
+                          key={t.id}
+                          className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 text-xs border border-amber-200"
+                        >
+                          {t.name} · {t._count.contacts}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-stone-400 mt-4">
+                    {businessTypeCount} business type
+                    {businessTypeCount === 1 ? "" : "s"} in use across your
+                    leads.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="space-y-6 min-w-0">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-medium text-stone-700">
-                This week
-              </h2>
-              <Link
-                href="/analytics"
-                className="text-[11px] text-amber-700 hover:underline"
-              >
-                Full analytics →
-              </Link>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {weekMetrics.map((m) => (
-                <div
-                  key={m.label}
-                  className="bg-white rounded-2xl border border-stone-200 p-3"
+          {seeCampaigns && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-medium text-stone-700">
+                  This week
+                </h2>
+                <Link
+                  href="/analytics"
+                  className="text-[11px] text-amber-700 hover:underline"
                 >
-                  <div className="text-xl font-semibold text-stone-900">{m.value}</div>
-                  <div className="text-[11px] text-stone-500 mt-1 leading-tight">
-                    {m.label}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {weekSentTotal === 0 && (
-              <p className="text-xs text-stone-400 mt-2">
-                No sends in the last 7 days yet.
-              </p>
-            )}
-          </div>
-
-          <div>
-            <h2 className="text-sm font-medium text-stone-700 mb-3">
-              Recent activity
-            </h2>
-            {recentEvents.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-stone-200 px-4 py-6 text-center">
-                <p className="text-sm text-stone-500">Nothing yet — activity shows up here as leads come in.</p>
+                  Full analytics →
+                </Link>
               </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100">
-                {recentEvents.map((e) => (
+              <div className="grid grid-cols-3 gap-2">
+                {weekMetrics.map((m) => (
                   <div
-                    key={e.id}
-                    className="px-4 py-2.5 text-sm text-stone-700 flex items-center gap-2.5"
+                    key={m.label}
+                    className="bg-white rounded-2xl border border-stone-200 p-3"
                   >
-                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${eventDotClass(e.type)}`} />
-                    <span className="truncate">
-                      {eventLabel(e.type)}
-                      <span className="text-stone-400">
-                        {" "}
-                        — {e.contact.name || e.contact.phone}
-                      </span>
-                    </span>
+                    <div className="text-xl font-semibold text-stone-900">{m.value}</div>
+                    <div className="text-[11px] text-stone-500 mt-1 leading-tight">
+                      {m.label}
+                    </div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+              {weekSentTotal === 0 && (
+                <p className="text-xs text-stone-400 mt-2">
+                  No sends in the last 7 days yet.
+                </p>
+              )}
+            </div>
+          )}
+
+          {seeLeads && (
+            <div>
+              <h2 className="text-sm font-medium text-stone-700 mb-3">
+                Recent activity
+              </h2>
+              {recentEvents.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-stone-200 px-4 py-6 text-center">
+                  <p className="text-sm text-stone-500">Nothing yet — activity shows up here as leads come in.</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100">
+                  {recentEvents.map((e) => (
+                    <div
+                      key={e.id}
+                      className="px-4 py-2.5 text-sm text-stone-700 flex items-center gap-2.5"
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${eventDotClass(e.type)}`} />
+                      <span className="truncate">
+                        {eventLabel(e.type)}
+                        <span className="text-stone-400">
+                          {" "}
+                          — {e.contact.name || e.contact.phone}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 
 const BodySchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
@@ -18,6 +19,8 @@ export async function GET() {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "CAMPAIGNS", "view");
+  if (denied) return denied;
 
   const scheduled = await prisma.scheduledCampaign.findMany({
     where: { tenantId: session.tenantId },
@@ -38,6 +41,8 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied2 = requirePermission(session, "CAMPAIGNS", "edit");
+  if (denied2) return denied2;
 
   const parsed = BodySchema.safeParse(await req.json());
   if (!parsed.success) {

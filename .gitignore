@@ -36,6 +36,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+!.env.production.example
 
 # vercel
 .vercel
@@ -43,3 +44,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editors — keep tasks.json (team dev-server autostart, see README) and
+# extensions.json (recommended extensions), ignore everyone's personal
+# settings/launch configs
+.vscode/*
+!.vscode/tasks.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo

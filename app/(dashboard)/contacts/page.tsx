@@ -1,5 +1,7 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { canView } from "@/lib/permissions";
+import NoModuleAccess from "../no-module-access";
 import { STAGES } from "./stages";
 import LeadsClient, { type LeadRow } from "./leads-client";
 
@@ -8,7 +10,9 @@ export default async function ContactsPage({
 }: {
   searchParams: Promise<{ stage?: string; new?: string; import?: string }>;
 }) {
-  const { tenantId } = await requireSession();
+  const session = await requireSession();
+  const { tenantId } = session;
+  if (!canView(session.permissions, "LEADS")) return <NoModuleAccess />;
   const { stage, new: newParam, import: importParam } = await searchParams;
 
   const activeStage = STAGES.some((s) => s.value === stage) ? stage : undefined;

@@ -1,6 +1,7 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
+import { requirePermission } from "@/lib/permissions";
 import { getPhoneNumberInfo } from "@/core/channels/whatsapp";
 
 export async function POST() {
@@ -10,6 +11,8 @@ export async function POST() {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "SETTINGS", "view");
+  if (denied) return denied;
 
   const tenant = await prisma.tenant.findUniqueOrThrow({
     where: { id: session.tenantId },

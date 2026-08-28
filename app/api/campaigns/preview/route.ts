@@ -1,5 +1,6 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 
 export async function GET(req: Request) {
   let session;
@@ -8,6 +9,8 @@ export async function GET(req: Request) {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "CAMPAIGNS", "view");
+  if (denied) return denied;
 
   const url = new URL(req.url);
   const tagId = url.searchParams.get("tagId") || undefined;

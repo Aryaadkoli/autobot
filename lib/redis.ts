@@ -13,4 +13,16 @@ export const redisConnection =
     maxRetriesPerRequest: null,
   });
 
+// ioredis auto-reconnects on its own (default retryStrategy), but an
+// `error` event with no listener at all is treated as fatal by Node —
+// this showed up as real, reproducible noise (and in one production-mode
+// test, an uncaught `write EPIPE`) whenever Redis was briefly unreachable
+// (e.g. during `npm run build`, which imports every route including ones
+// that touch this file, with no Redis running at all). A listener that
+// just logs turns "briefly can't reach Redis" back into what it should
+// be: a transient warning, not a crash.
+redisConnection.on("error", (err) => {
+  console.error("[redis] connection error:", err.message);
+});
+
 if (process.env.NODE_ENV !== "production") globalForRedis.redis = redisConnection;

@@ -1,6 +1,14 @@
+import type { PermissionMap } from "@/lib/permissions";
+
 // Extends NextAuth's built-in types with the fields auth.ts actually puts
 // on the session/JWT — avoids `any` scattered through the callbacks.
-export type Membership = { userId: string; tenantId: string; tenantName: string; role: string };
+export type Membership = {
+  userId: string;
+  tenantId: string;
+  tenantName: string;
+  role: string;
+  permissions: PermissionMap;
+};
 
 declare module "next-auth" {
   interface User {
@@ -27,6 +35,7 @@ export type AppJWT = {
   userId?: string;
   tenantId?: string;
   role?: string;
+  permissions?: PermissionMap;
   name?: string | null;
   email?: string | null;
   memberships?: Membership[];
@@ -37,6 +46,7 @@ export type AppSessionUser = {
   id: string | null;
   tenantId: string | null;
   role: string | null;
+  permissions: PermissionMap | null;
   memberships: Membership[];
   name?: string | null;
   email?: string | null;

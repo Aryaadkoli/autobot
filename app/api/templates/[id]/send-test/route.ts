@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 import { sendTemplateToContact } from "@/core/channels/send";
 
 const BodySchema = z.object({ leadId: z.string().min(1) });
@@ -15,6 +16,8 @@ export async function POST(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "TEMPLATES", "edit");
+  if (denied) return denied;
   const { id: templateId } = await params;
 
   const parsed = BodySchema.safeParse(await req.json());

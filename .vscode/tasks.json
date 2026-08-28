@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Autobot: start Redis",
+      "type": "shell",
+      "command": "docker start autobot-redis 2>/dev/null || docker run -d --name autobot-redis -p 6379:6379 redis",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "close": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Autobot: dev server",
+      "type": "shell",
+      "command": "npm run dev",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ">.*next dev",
+          "endsPattern": "Ready in"
+        }
+      },
+      "dependsOn": ["Autobot: start Redis"],
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    }
+  ]
+}

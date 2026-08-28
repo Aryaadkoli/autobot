@@ -10,13 +10,13 @@ function formatHour(h: number) {
 }
 
 export default function SendingLimits({
-  isOwner,
+  canEdit,
   timezone,
   dailyCapPerContact,
   quietHoursStart,
   quietHoursEnd,
 }: {
-  isOwner: boolean;
+  canEdit: boolean;
   timezone: string;
   dailyCapPerContact: number;
   quietHoursStart: number;
@@ -77,7 +77,7 @@ export default function SendingLimits({
             and <span className="font-medium">{formatHour(quietHoursEnd)}</span>{" "}
             ({timezone})
           </p>
-          {isOwner && (
+          {canEdit && (
             <button
               onClick={() => setEditing(true)}
               className="mt-3 rounded-lg border border-stone-300 text-stone-700 text-sm px-3 py-1.5 hover:bg-stone-100 cursor-pointer"

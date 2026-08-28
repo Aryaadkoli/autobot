@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
 import { normalizePhone } from "@/lib/phone";
+import { requirePermission } from "@/lib/permissions";
 import { outcomeLabelFromDefinition } from "@/core/workflow/outcome-label";
 import { LeadInputSchema, assertTagsBelongToTenant } from "../schema";
 
@@ -15,6 +16,8 @@ export async function GET(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "LEADS", "view");
+  if (denied) return denied;
   const { id } = await params;
 
   const contact = await prisma.contact.findFirst({
@@ -75,6 +78,8 @@ export async function PATCH(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "LEADS", "edit");
+  if (denied) return denied;
   const { tenantId } = session;
   const { id } = await params;
 
@@ -102,10 +107,16 @@ export async function PATCH(
   if (tagError) return Response.json({ error: tagError }, { status: 400 });
 
   if (phone !== existing.phone) {
+    // Only a live clash is reported here. A soft-deleted contact still
+    // physically holds its phone number (real unique constraint, see
+    // schema.prisma) — that rarer case isn't resurrected here like a
+    // fresh create is (contacts/route.ts); it falls through to the
+    // update below, which hits the same constraint and is caught there
+    // with the same error.
     const clash = await prisma.contact.findUnique({
       where: { tenantId_phone: { tenantId, phone } },
     });
-    if (clash) {
+    if (clash && !clash.deletedAt) {
       return Response.json(
         { error: "Another lead already uses this phone number" },
         { status: 409 }
@@ -189,6 +200,8 @@ export async function DELETE(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "LEADS", "edit");
+  if (denied) return denied;
   const { tenantId } = session;
   const { id } = await params;
 
@@ -197,20 +210,14 @@ export async function DELETE(
     return Response.json({ error: "Lead not found" }, { status: 404 });
   }
 
-  const messages = await prisma.message.findMany({
-    where: { contactId: id },
-    select: { id: true },
-  });
-  const messageIds = messages.map((m) => m.id);
-
-  await prisma.$transaction([
-    prisma.link.deleteMany({ where: { messageId: { in: messageIds } } }),
-    prisma.message.deleteMany({ where: { contactId: id } }),
-    prisma.sequenceInstance.deleteMany({ where: { contactId: id } }),
-    prisma.event.deleteMany({ where: { contactId: id } }),
-    prisma.contactTag.deleteMany({ where: { contactId: id } }),
-    prisma.contact.delete({ where: { id } }),
-  ]);
+  // Soft delete (see lib/db.ts) — this contact's messages, events, and
+  // workflow history are left exactly as they are, just no longer
+  // reachable through a hidden contact. Previously this hard-deleted
+  // all of that first (required back when .delete() really deleted the
+  // row, to satisfy ON DELETE RESTRICT foreign keys) — that cascade is
+  // gone now on purpose, since wiping real history is the opposite of
+  // what "soft" delete is supposed to mean.
+  await prisma.contact.delete({ where: { id } });
 
   return Response.json({ id });
 }

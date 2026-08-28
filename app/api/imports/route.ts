@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 import { importContacts } from "@/core/ingestion/upsert";
 
 const BodySchema = z.object({
@@ -17,6 +18,8 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "LEADS", "edit");
+  if (denied) return denied;
 
   const parsed = BodySchema.safeParse(await req.json());
   if (!parsed.success) {

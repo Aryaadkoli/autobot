@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { requirePermission } from "@/lib/permissions";
 import { WorkflowDefinitionSchema, validateWorkflowDefinition } from "@/core/workflow/schema";
 
 const PatchSchema = z.object({
@@ -19,6 +20,8 @@ export async function PATCH(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied = requirePermission(session, "WORKFLOWS", "edit");
+  if (denied) return denied;
   const { id } = await params;
 
   const workflow = await prisma.workflow.findFirst({
@@ -85,6 +88,8 @@ export async function DELETE(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const denied2 = requirePermission(session, "WORKFLOWS", "edit");
+  if (denied2) return denied2;
   const { id } = await params;
 
   const workflow = await prisma.workflow.findFirst({

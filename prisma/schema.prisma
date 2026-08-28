@@ -34,6 +34,7 @@ model Tenant {
   createdAt DateTime @default(now())
 
   users         User[]
+  roles         Role[]
   businessTypes BusinessType[]
   services      Service[]
   contacts      Contact[]
@@ -77,21 +78,85 @@ model Account {
 // still key off this row exactly as before; only identity moved out to
 // Account.
 model User {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   accountId String
-  account   Account  @relation(fields: [accountId], references: [id])
-  role      Role     @default(ADMIN)
-  createdAt DateTime @default(now())
+  account   Account   @relation(fields: [accountId], references: [id])
+  roleId    String
+  role      Role      @relation(fields: [roleId], references: [id])
+  createdAt DateTime  @default(now())
+  deletedAt DateTime? // set instead of a hard delete when a teammate is
+                       // removed — see lib/db.ts's soft-delete extension.
 
+  // A removed teammate is soft-deleted (deletedAt set), and this
+  // constraint stays a genuine, unconditional unique index — Postgres
+  // can't target a partial index from .upsert()'s ON CONFLICT clause
+  // (confirmed live: an earlier version of this migration tried that and
+  // every upsert on this table threw). Practical effect: re-inviting a
+  // removed teammate reuses their existing (soft-deleted) User row
+  // rather than creating a new one — see app/api/users/route.ts.
   @@unique([tenantId, accountId])
 }
 
-enum Role {
-  OWNER  // your dad / the buying business owner
-  ADMIN  // can edit workflows, templates
-  AGENT  // read-only + can view conversations
+// Per-tenant roles. Every tenant gets three system roles seeded on
+// creation (OWNER / CO_OWNER / MEMBER, isSystem: true) — the app's OWNER
+// checks (session.role === "OWNER") depend on that exact name existing,
+// so system roles can never be renamed or deleted. OWNER and CO_OWNER
+// always have full access and never get RolePermission rows (see
+// lib/permissions.ts) — CO_OWNER's one restriction (can't remove an
+// OWNER/CO_OWNER account) is hardcoded there too, not modeled as a
+// permission. MEMBER and any custom role the owner creates are governed
+// entirely by their RolePermission rows.
+model Role {
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  name      String    // "OWNER" / "CO_OWNER" / "MEMBER" or a custom name
+  isSystem  Boolean   @default(false)
+  deletedAt DateTime? // set instead of a hard delete when the role is
+                       // still assigned to someone at delete time; a
+                       // soft-deleted role keeps working for whoever
+                       // already has it, it just stops being offered
+                       // when assigning a role to someone new. Because
+                       // this is a genuine unique constraint (not
+                       // partial — see the User model's comment above),
+                       // recreating a role with the same name as a
+                       // soft-deleted one resurrects it instead of
+                       // making a second row — see app/api/roles/route.ts.
+  createdAt DateTime  @default(now())
+  users     User[]
+  permissions RolePermission[]
+
+  @@unique([tenantId, name])
+}
+
+// What a role can see/do per feature area of the app. OWNER and CO_OWNER
+// bypass this entirely (see lib/permissions.ts) — they always have full
+// view+edit on everything and never get rows here. Every other role
+// (MEMBER and any custom role) is governed by whatever rows exist for
+// it; a module with no row at all means no access, same as canView/
+// canEdit both false.
+model RolePermission {
+  id      String  @id @default(cuid())
+  roleId  String
+  role    Role    @relation(fields: [roleId], references: [id])
+  module  Module
+  canView Boolean @default(false)
+  canEdit Boolean @default(false)
+
+  @@unique([roleId, module])
+}
+
+enum Module {
+  LEADS      // Contacts, tags, tag rules, imports
+  TEMPLATES
+  CAMPAIGNS  // Campaigns + scheduled campaigns
+  WORKFLOWS
+  ANALYTICS
+  TEAM       // Team members + roles (view/edit here does NOT let a non-owner
+             // touch an OWNER/CO_OWNER account — see lib/permissions.ts)
+  SETTINGS   // WhatsApp connection, sending limits
 }
 
 // ─────────────────────────────────────────────
@@ -154,13 +219,19 @@ model Contact {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime? // set instead of a hard delete — see lib/db.ts's
+                       // soft-delete extension.
 
   tags      ContactTag[]
   events    Event[]
   instances SequenceInstance[]
   messages  Message[]
 
-  @@unique([tenantId, phone]) // dedupe key on import
+  // Dedupe key on import — a genuine unique constraint (see the User
+  // model's comment above for why it's not partial). A deleted contact's
+  // phone number stays reserved by that row; core/ingestion/upsert.ts
+  // resurrects it on a matching re-import instead of erroring.
+  @@unique([tenantId, phone])
   @@index([tenantId, businessTypeId])
 }
 
@@ -169,10 +240,15 @@ model Tag {
   tenantId String
   tenant   Tenant       @relation(fields: [tenantId], references: [id])
   name     String       // "dormant-30d", "high-value", "interested-productX"
+  deletedAt DateTime?    // set instead of a hard delete — see lib/db.ts's
+                          // soft-delete extension.
   contacts ContactTag[]
   rules    TagRule[]
   scheduledCampaigns ScheduledCampaign[]
 
+  // Genuine unique constraint (see the User model's comment above for
+  // why) — a deleted tag's name stays reserved; core/ingestion/upsert.ts
+  // resurrects it when the same name is used again via bulk import.
   @@unique([tenantId, name])
 }
 
@@ -295,9 +371,14 @@ model Workflow {
   // The playbook — see workflow-format.md for the JSON structure
   definition Json
   createdAt  DateTime      @default(now())
+  deletedAt  DateTime?     // set instead of a hard delete — see
+                            // lib/db.ts's soft-delete extension.
 
   instances SequenceInstance[]
 
+  // Genuine unique constraint (see the User model's comment above) — a
+  // deleted workflow's (name, version) stays reserved; bump the version
+  // to reuse the name, same as any other name clash.
   @@unique([tenantId, name, version])
 }
 
@@ -366,11 +447,16 @@ model MessageTemplate {
   variables      Json   @default("[]") // [{"pos":1,"source":"contact.name"},{"pos":2,"source":"context.invoice_no"}]
   approvalStatus TemplateApproval @default(PENDING)
   createdAt      DateTime @default(now())
+  deletedAt      DateTime? // set instead of a hard delete — see
+                            // lib/db.ts's soft-delete extension.
 
   messages  Message[]
   campaigns Campaign[]
   scheduledCampaigns ScheduledCampaign[]
 
+  // Genuine unique constraint (see the User model's comment above) — a
+  // deleted template's name stays reserved until it's picked again with
+  // a different name (mirrors the existing "name already exists" error).
   @@unique([tenantId, name])
 }
 

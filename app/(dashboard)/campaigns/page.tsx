@@ -1,9 +1,13 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
+import { canView } from "@/lib/permissions";
+import NoModuleAccess from "../no-module-access";
 import CampaignsClient from "./campaigns-client";
 
 export default async function CampaignsPage() {
-  const { tenantId } = await requireSession();
+  const session = await requireSession();
+  const { tenantId } = session;
+  if (!canView(session.permissions, "CAMPAIGNS")) return <NoModuleAccess />;
 
   const [templates, tags, history, scheduled] = await Promise.all([
     prisma.messageTemplate.findMany({

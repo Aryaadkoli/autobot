@@ -447,8 +447,392 @@ SEED_ADMIN_PASSWORD.
 [ ] Phase 6: Email (Brevo) adapter, ingest API, settings. (SMS dropped —
     not integrating for now; no SMS code/schema fields remain in the
     codebase as of the recurrence/calendar session.)
-[ ] Phase 7: Deployment — Docker Compose, Oracle Cloud VM, Caddy, domain,
-    backups (guide: docs/02_HOSTING_AND_ACCOUNTS.md if present)
+[~] Phase 7: Deployment — going step by step (owner directing, 5 steps
+    total), Oracle Cloud "Always Free" VM chosen (genuinely free forever,
+    matches the already-built architecture — no serverless rework
+    needed; Vercel was considered and rejected: no persistent process for
+    instrumentation.ts's scheduler/worker, Hobby-tier cron is once/day
+    only, ephemeral filesystem breaks template image uploads, no
+    included Postgres/Redis anyway).
+    Step 1/5 DONE: next.config.ts now has `output: "standalone"` (lean,
+    Docker-ready build) + `outputFileTracingRoot` (fixes a real
+    multi-lockfile workspace-root misdetection warning). Verified live,
+    not just built: ran the actual `node .next/standalone/server.js`
+    (exactly what Docker will run) with static assets manually copied in
+    alongside it, confirmed instrumentation.ts's scheduler + in-process
+    workflow worker both start, confirmed a real login round-trip
+    against it (multi-tenant session data correct), confirmed a static
+    CSS asset actually serves. Reverted to normal `npm run dev` after.
+    Step 2/5 DONE: Dockerfile (multi-stage: base → builder → web/worker
+    targets) + .dockerignore + .npmrc. Two real bugs found ONLY by
+    actually building/running the images (not by reading the Dockerfile):
+    (1) `npm ci` is stricter than the `npm install` used locally and
+    failed on next-auth's optional nodemailer peer-dep range (9.0.5 is
+    pinned deliberately for a real CVE fix that doesn't exist in 8.x) —
+    fixed via .npmrc's `legacy-peer-deps=true` (not a CLI flag — `npm ci
+    --legacy-peer-deps` isn't accepted the way `npm install` accepts it).
+    Also caught genuine package-lock.json drift (`npm ci` refused to
+    proceed, `@emnapi/runtime` missing) — fixed at the source with a
+    real `npm install` + lockfile commit, not papered over. (2)
+    prisma.config.ts requires DATABASE_URL to be *set* just to load
+    (`prisma generate` itself never connects) — .env is deliberately not
+    in the Docker build context, so the builder/worker stages set a
+    throwaway placeholder DATABASE_URL via ENV, overridden by the real
+    one at container runtime.
+    lib/redis.ts hardened at the same time: an unhandled ioredis `error`
+    event was crashing/spamming during `npm run build` (Redis wasn't
+    running) — added an error listener so a Redis hiccup logs a warning
+    instead of an unhandled exception. auth.ts also got `trustHost: true`
+    — a real, tested finding: `npm run build && npm run start` throws
+    NextAuth's "UntrustedHost" on the very first request otherwise; dev
+    mode never surfaces this since it trusts localhost automatically.
+    Verified live, not simulated: built both the `web` (436MB) and
+    `worker` (2.3GB — full node_modules+source, since tsx isn't
+    traceable the way `next build` traces the web image) targets for
+    real, ran BOTH containers against the real local Postgres+Redis
+    (`--network host`), did a real login round-trip against the
+    containerized web server (correct multi-tenant session data), and
+    confirmed the worker container connects cleanly. Also drove one full
+    real scheduled-campaign cycle through the containerized app end to
+    end (insert a due row → watched the container's scheduler tick,
+    process it, flip it to SENT with real mock-adapter sends to real
+    leads) — chased down what first looked like a scheduler bug (row
+    stayed PENDING) that turned out to be MY test methodology: a raw
+    `psql` insert using session-local `NOW()` (Asia/Kolkata) got stored
+    as a naive timestamp 5.5h ahead of true UTC, while the app itself is
+    internally consistent (Node `Date`/UTC on both write and read paths)
+    — not an app bug, but worth remembering: Step 3's docker-compose
+    Postgres service must NOT set a non-UTC container TZ, or this exact
+    footgun becomes reproducible for real. All test containers/images
+    kept locally (autobot-web:test, autobot-worker:test) for Step 3;
+    all test DB rows cleaned up; local `npm run dev` confirmed working
+    again after.
+    Step 3/5 DONE: docker-compose.yml — postgres (UTC, no TZ override —
+    see Step 2's timestamp footgun), redis, web, worker, caddy, with
+    healthcheck-gated startup ordering (web/worker wait for postgres+redis
+    to report healthy, not just "started"). DATABASE_URL/REDIS_URL are
+    set directly in compose (service-name hostnames: postgres:5432,
+    redis:6379), not left to .env, so a wrong local-style URL in .env
+    can't silently break the containerized wiring; DB_PASSWORD is the
+    one secret compose substitutes in. Caddyfile is a real placeholder
+    (plain :80, no domain yet — Step 4 finalizes it with automatic HTTPS).
+    Verified against the FULL real stack, not simulated: `docker compose
+    up` (with a throwaway, gitignored, never-committed .env copy used
+    only for this local test — the real .env/docker-compose.yml were
+    reverted after), all 5 containers reached healthy/running, ran
+    `prisma migrate deploy` and the new production seed (see below)
+    INSIDE the running worker container exactly as a real deployment
+    would, then logged in through Caddy → web → Postgres end-to-end —
+    correct single-tenant session, confirmed the Leads page genuinely
+    empty ("No leads") and Workflows' "+ New workflow" enabled (proving
+    the seeded Service scaffolding works) via the actual running stack,
+    not assumption. Confirmed the original local dev database was
+    completely untouched throughout (separate Docker volume). Torn down
+    and cleaned up completely after; local `npm run dev` confirmed
+    working again.
+    Also this session: a real production seed now exists —
+    prisma/seed.prod.ts (run manually via `npx tsx prisma/seed.prod.ts`,
+    deliberately NOT what `npx prisma db seed` runs — that stays the rich
+    local dev dataset in prisma/seed.ts). Creates exactly one Tenant
+    ("Surabharati"), one Account (aryaadkoli@gmail.com, OWNER, password
+    from SEED_ADMIN_PASSWORD — refuses to run if that's unset rather than
+    defaulting to something guessable), and one minimal Service ("Lead
+    follow-up") — the one deliberate non-demo-data exception, since
+    there's currently no UI to create a Service and a zero-Service tenant
+    would have Workflows permanently disabled with no way to unblock it.
+    No leads/tags/templates/workflows/campaigns. Verified idempotent (ran
+    twice against a real fresh database, second run changed nothing) and
+    verified against the real compose stack above, not just a unit check.
+    Settings also reworked per explicit request: the whole "Team members"
+    section (not just the add/remove actions, which were already
+    owner-gated) is now owner-only — an ADMIN/AGENT teammate no longer
+    sees who else is on the team or what role they hold. Verified live
+    with a real temporary owner + admin account pair: owner's Settings
+    page shows "Team members"/"Add teammate", admin's does not (while
+    still correctly showing WhatsApp connection/Sending limits, which
+    stay visible read-only to everyone) — cleaned up after.
+    Steps 4-5 done in a later session. Domain: autobot.urvanidhi.com (a
+    subdomain of the owner's existing urvanidhi.com, already live on
+    Vercel for a separate marketing site — no conflict, different
+    subdomain). Caddyfile now has that real domain (was a :80 placeholder)
+    — validated with `caddy validate`, confirmed HTTPS + auto-redirect
+    configured correctly (can't get a real cert until DNS points at the
+    VM, which doesn't exist yet). .env.production.example documents every
+    var the VM's real .env needs — APP_URL=https://autobot.urvanidhi.com,
+    fresh AUTH_SECRET/CREDENTIALS_KEY (never reuse dev's), DB_PASSWORD,
+    SEED_ADMIN_PASSWORD, GMAIL_USER=urvanidhi@gmail.com, Meta vars left
+    blank (still deferred — see below).
+    deploy/bootstrap.sh (one-time VM setup: Docker, 2GB swap file for the
+    free-tier 1GB-RAM shape, ufw), deploy/backup.sh (nightly pg_dump,
+    gzip, 14-day rotation), deploy/restore.sh (drop+recreate+restore,
+    confirms before running since it's destructive), docs/RUNBOOK.md
+    (the actual deploy-day walkthrough + ongoing ops: updates, migrations,
+    logs, secret rotation, disk cleanup).
+    Backup/restore verified for real, not just read: spun up a throwaway
+    postgres container via `docker compose --env-file .env.compose-test
+    up postgres` (gitignored test env, never the real one), inserted a
+    marker row, ran the actual backup command, dropped the table
+    (simulating data loss), ran the actual restore command, confirmed the
+    marker row came back. Fully torn down after (`down -v`) — real local
+    dev Postgres (a separate, non-compose instance) confirmed unaffected
+    throughout (contact count unchanged).
+    WhatsApp real-number connection is a separate, still-open item — the
+    owner's dad's number (9900943005) is currently active in the regular
+    WhatsApp Business consumer app, and Meta's Cloud API requires
+    exclusive ownership of a number (can't run in both at once). Decided
+    to defer: either get a spare SIM dedicated to the API (recommended,
+    zero disruption) or migrate the existing number later once the
+    person using it is looped in — not done without their knowledge.
+    Deployment itself doesn't depend on this either way; the app just
+    won't send real WhatsApp messages until a number is connected via
+    Settings, same mock-fallback pattern as email currently has for Gmail.
+    Still not started/deferred: actually provisioning the Oracle Cloud
+    VM, pointing DNS at it, and running through docs/RUNBOOK.md for real
+    — that's the owner's own next action, not something done from here.
+    Account emails now send from urvanidhi@gmail.com (GMAIL_USER in .env),
+    switched from aryaadkoli@gmail.com — durable, keep using this account
+    going forward. Verified via a one-off script sending the real prod
+    login (aryaadkoli@gmail.com / a freshly-generated random password) to
+    aryaadkoli@gmail.com; script deleted after use.
+    Found and disclosed to owner: ADMIN and AGENT roles have NO distinct
+    enforcement anywhere in the code — every permission check in the app
+    is `session.role === "OWNER"` / `!== "OWNER"` (settings/limits,
+    settings/whatsapp, users routes). The schema's enum comments describing
+    ADMIN as "can edit workflows/templates" vs AGENT as "read-only" are
+    aspirational and were never built. Added a small owner-only "Roles"
+    reference panel to Settings (app/(dashboard)/settings/roles-reference.tsx)
+    that describes this honestly rather than the aspirational schema intent.
+    Owner chose "do it now" when asked how to sequence this against
+    deployment. Built: `Role` is now a real per-tenant table (prisma/
+    migrations/20260827101815_role_table — renames the old enum type out
+    of the way, creates Role, seeds OWNER/ADMIN/AGENT per existing tenant,
+    backfills User.roleId from the old enum column, drops the enum).
+    isSystem=true marks the 3 built-ins — they can never be renamed or
+    deleted since session.role === "OWNER" checks depend on that exact
+    name existing. lib/roles.ts's createSystemRoles()/SYSTEM_ROLE_NAMES is
+    the shared helper (used by signupNewBusiness, both seed scripts).
+    New endpoints: POST /api/roles (create custom role, owner-only),
+    DELETE /api/roles/[id] (owner-only; refuses on isSystem; soft-deletes
+    — sets deletedAt, keeps the row and everyone's assignment — if
+    anyone currently has the role, hard-deletes only if unused).
+    /api/users POST now takes roleId instead of a role enum string, and
+    validates it belongs to the tenant and isn't OWNER. Settings' Roles
+    reference panel (roles-reference.tsx) is now interactive: lists all
+    roles (built-in + custom, soft-deleted ones grayed out with a
+    "Deleted" tag and member count), lets the owner add a custom role or
+    delete one, and keeps the honest note that ADMIN/AGENT/custom roles
+    are all functionally identical today (no fine-grained permissions
+    built yet — that's still open, see above). UserModal's role <select>
+    now lists the tenant's actual assignable roles (non-deleted,
+    non-OWNER) instead of a hardcoded ADMIN/AGENT pair.
+    Verified live end-to-end against a throwaway single-tenant test
+    account (never against real data): created 2 custom roles, invited a
+    teammate into one via /api/users, confirmed a role with 2 members
+    soft-deletes (row stays, tag shows "Deleted", both members keep it),
+    confirmed a role with 0 members hard-deletes (row actually gone),
+    confirmed DELETE on a system role's id returns 400. All test
+    rows deleted afterward; real demo dataset counts (2 tenants, 6 roles,
+    2 users, 11 contacts) confirmed unchanged.
+    Real mistake made and caught during this verification, worth
+    remembering: prefixing `GMAIL_APP_PASSWORD=` on a `curl` command only
+    clears it in *that shell* — the already-running dev server process
+    still has the real value from .env (Next.js reads .env directly, a
+    shell-level unset doesn't reach it), so an API call that triggers
+    sendAccountEmail() still fires a real send. This caused one real
+    (harmless — to a fake, non-existent address) send to
+    field-tester-internal-test@example.com from urvanidhi@gmail.com,
+    disclosed to the owner immediately. The correct way to force the
+    mailer's mock fallback for a test: comment out GMAIL_USER/
+    GMAIL_APP_PASSWORD in the actual .env file, restart the dev server,
+    run the test, then restore .env and restart again — not a shell-level
+    env prefix on the client-side test command.
+
+Follow-up session: owner asked (1) what roles exist, (2) whether CRUD
++ soft-delete exists everywhere, (3) to redesign the role set (OWNER,
+CO_OWNER, one more role for now) with owner-choosable per-module
+view/edit permissions on every role, enforced on every API route.
+Answered (1)/(2) directly, then built (3) in full — a real permission
+system, not just the role table from the prior entry.
+
+Schema (two more migrations on top of the Role-table one):
+20260827110000_soft_delete_core_models added deletedAt to Contact, Tag,
+MessageTemplate, Workflow, User and (first attempt) made their unique
+constraints partial (WHERE deletedAt IS NULL). That broke immediately —
+confirmed live, not just type-checked — because Postgres refuses to
+match `.upsert()`'s generated `ON CONFLICT (col,col)` clause against a
+partial index. 20260827130000_revert_partial_unique_indexes reverted
+all six (Contact/Tag/MessageTemplate/Workflow/User/Role) back to plain
+unique constraints, matching schema.prisma exactly. Real cost of that
+revert: a soft-deleted row's key stays reserved rather than freeing up
+automatically — so anywhere recreating the same key is a plausible
+action (re-add a deleted contact/tag/role, re-invite a removed
+teammate), the create path explicitly checks for and resurrects the old
+row (clears deletedAt, replaces its data/permissions) instead of trying
+to insert a duplicate: app/api/contacts/route.ts,
+core/ingestion/upsert.ts (contact + tag), app/api/roles/route.ts,
+app/api/users/route.ts. Where that resurrection wasn't added
+(Tags/Templates/Workflows' own dedicated create-if-missing checks,
+contacts/[id]/route.ts's phone-change-on-edit case), a stale key still
+just falls through to a real P2002 caught by the existing "already
+exists" error handling — never a crash, just not auto-resurrected.
+lib/db.ts now wraps the Prisma client in a query extension (Prisma's
+own documented soft-delete recipe) that rewrites .delete()/.deleteMany()
+on those 5 models into an update setting deletedAt, and injects
+`deletedAt: null` into findMany/findFirst/findFirstOrThrow/count. A
+second export, `prismaIncludingDeleted`, is the unfiltered base client —
+used only by the resurrection call sites above. findUnique/
+findUniqueOrThrow are deliberately unfiltered (matches Prisma's own
+recipe) since whether a soft-deleted row should count there is decided
+per call site, not globally.
+Role model (separate from the extension, hand-rolled) gained a real
+Module enum (LEADS/TEMPLATES/CAMPAIGNS/WORKFLOWS/ANALYTICS/TEAM/
+SETTINGS) and RolePermission table (roleId, module, canView, canEdit).
+System roles renamed ADMIN→CO_OWNER, AGENT→MEMBER for every existing
+tenant (data migration, not just relabeling — existing User rows keep
+their roleId, so nobody's actual membership changed). OWNER and
+CO_OWNER bypass RolePermission entirely — lib/permissions.ts's
+isOwnerTier() grants them full view+edit on every module unconditionally,
+they never get rows in the table. MEMBER gets real default permissions
+(view-only on LEADS/TEMPLATES/CAMPAIGNS/WORKFLOWS/ANALYTICS, no access
+to TEAM/SETTINGS) seeded via lib/roles.ts's createSystemRoles() for new
+tenants and a one-time backfill in the rename migration for existing
+ones. Custom roles start with whatever permissions the owner picks in
+the "Add role" form (app/(dashboard)/settings/roles-reference.tsx) and
+default to none for anything left unchecked.
+CO_OWNER's one restriction (can't remove or demote an OWNER/CO_OWNER
+account, can't grant CO_OWNER to someone else) is hardcoded in
+app/api/users/route.ts and [id]/route.ts, not modeled as a permission —
+it protects the ownership structure itself, which no permission toggle
+should be able to touch.
+Permissions are computed once at login (auth.ts's authorize(), via
+lib/permissions.ts's computePermissions()) and embedded in the JWT next
+to role/tenantId — same pattern as everything else in the session, so a
+permission change an owner makes doesn't take effect for someone
+already logged in until they log in again (documented limitation,
+consistent with how a role reassignment already worked before this).
+requireSession()/requireAccountSession() both now return `permissions`.
+Every API route that touches Leads/Tags/Imports (LEADS),
+Templates (TEMPLATES), Campaigns/ScheduledCampaigns (CAMPAIGNS),
+Workflows (WORKFLOWS), Team/Roles (TEAM), or WhatsApp/sending settings
+(SETTINGS) now calls lib/permissions.ts's requirePermission() instead of
+a hardcoded `session.role !== "OWNER"` check — Analytics has no API
+(SSR-only) so it's gated at the page level only. Every corresponding
+dashboard page also checks canView() server-side and renders a shared
+NoModuleAccess component instead of the real content when it's false —
+defense in depth alongside the API checks, and the sidebar
+((dashboard)/layout.tsx) filters nav links the same way so there's
+nothing to click into in the first place.
+Verified live end-to-end against a throwaway tenant (owner + a MEMBER +
+a CO_OWNER + a custom FIELD_AGENT role), never against real data:
+MEMBER can view Leads but a create POST 403s; MEMBER's Settings page
+renders the empty-access message and GET /api/users 403s; the sidebar
+genuinely omits the Settings link for MEMBER; CO_OWNER blocked from
+removing the OWNER and from granting CO_OWNER to someone else; a
+contact soft-deleted then re-created with the same phone resurrects the
+same row (same id, visible again); a role soft-deleted while in use
+(assignedCount>0) keeps the assigned teammate's access, then recreating
+the same name resurrects the same row with the new permissions
+replacing the old ones; a removed teammate re-invited by email
+resurrects their same User row rather than duplicating it. Real login
+(aryaadkoli@gmail.com) and both real tenants' data (2 tenants, 6 roles
+post-rename, 2 users, 11 contacts) confirmed unchanged afterward. All
+test accounts/tenants/roles deleted after. Repeated the earlier
+session's mailer mistake once during this verification (a real send
+attempt to a fake address, caught immediately, same root cause —
+`GMAIL_APP_PASSWORD=` prefixed on a curl command doesn't reach the
+already-running dev server's process env) — fixed properly this time by
+commenting the vars out of .env itself and restarting, and disclosed
+to the owner as it happened rather than after.
+Not done: BusinessType/Service still have no CRUD UI/API at all (only
+usable via the seed scripts) — flagged to the owner, not built this
+session. Campaign/Message/Event were deliberately NOT made
+soft-deletable — they're send/audit logs, not editable content.
+
+Full pre-prod security/RBAC audit (owner asked "is RBAC/JWT applied
+everywhere, check and implement, clear junk, and where do uploads live
+in prod vs local"). Confirmed the good news first: every one of the 28
+API route files requires a session (requireSession()/
+requireAccountSession()) and, on top of that, every module-scoped one
+calls requirePermission() — auditable via `grep -c requireSession\|
+requirePermission` across app/api. The only routes with no session
+check are the 3 that legitimately don't need one: NextAuth's own
+handler, the Meta webhook (protected by HMAC signature + verify-token
+instead, correctly using timingSafeEqual), and users/me/password (any
+authenticated account can change its own password, no module applies).
+Every mutation that takes a bare `{id}` (after an initial ownership
+findFirst) was checked and confirmed safe — no IDOR found anywhere.
+Real bugs found and fixed, not just theoretical:
+  - **Cross-tenant data leak in the WhatsApp webhook**: inbound-message
+    handling looked up a contact by phone alone, with no tenant scoping
+    — since phone is only unique per-tenant, two tenants sharing a
+    customer's phone number could have had their replies/opt-outs
+    misattributed to the wrong tenant. Fixed by resolving the owning
+    tenant from the webhook payload's `metadata.phone_number_id` first
+    (every real Meta payload carries it) before touching any contact.
+  - **PII leak on the Overview dashboard**: it had no module of its own
+    (a summary page, shown to everyone with a tenant) but unconditionally
+    queried and rendered lead names/phone numbers in a "recent activity"
+    feed, plus Leads/Campaigns/Workflows stats — all regardless of the
+    viewer's actual module permissions. A role with LEADS view=false
+    would still see leads' names right there on login. Fixed: every
+    section (and its underlying query — not just the render) is now
+    gated by canView() for the module it actually belongs to.
+  - **Missing permission check on `/contacts/[id]`**: the list page
+    checked canView(LEADS), the API route checked it, but the individual
+    lead detail *page* (a separate server component querying Prisma
+    directly) only checked tenant isolation, not the module permission —
+    a gap in an otherwise-consistent pattern. Fixed to match.
+  - **No rate limiting on signup**: login and password-change were
+    already throttled (lib/rate-limit.ts); the public, unauthenticated
+    signup Server Action had none — scriptable for spam-tenant creation,
+    and its own error message doubles as an account-existence oracle
+    ("this email already exists, wrong password"). Added the same
+    5-attempts/15-min throttle, keyed by email.
+  - **checkRateLimit could hang forever, not just fail**: the shared
+    Redis client is configured with `maxRetriesPerRequest: null`
+    (required elsewhere for BullMQ's blocking commands) — found by
+    actually stopping Redis and testing, not by reading the code, that
+    this makes a command queue and wait *indefinitely* rather than
+    reject while Redis is down. Every login/signup/password-change
+    would have hung forever during any Redis blip, unrelated to whether
+    Postgres (the real source of truth for auth) was fine. Fixed with a
+    1.5s timeout that fails OPEN (allows the request, logs a warning) —
+    verified in isolation afterward: exactly ~1501ms, `{allowed:true}`.
+    (The full HTTP path measured slower — several seconds — due to
+    Next.js dev-server request overhead layered on top; the core
+    fail-open mechanism itself is proven correct and bounded.)
+Uploads (app/api/templates/upload/route.ts, saves to public/uploads/):
+local dev writes straight to the real `public/uploads/templates/` folder
+on disk (gitignored — confirmed, never at risk of being committed) and
+persists fine across dev-server restarts. Production was a real,
+confirmed-live gap: the Dockerfile bakes public/ into the image at
+*build* time, and docker-compose.yml had no volume for the runtime
+uploads path — every `docker compose up --build` (i.e. every deploy)
+would have silently wiped every uploaded template image/PDF. Fixed with
+a named volume (`uploads:/app/public/uploads` on the `web` service
+only — worker never needs it, Meta fetches media by public URL, not
+from disk). That surfaced a second bug immediately on testing: a fresh
+named volume is created root:root by Docker, but the container runs as
+the non-root `nextjs` user (a deliberate security choice, kept) — so
+uploads would have failed outright with a permission error the first
+time anyone tried. Fixed in the Dockerfile (chown the directory before
+the USER switch, so Docker seeds the new volume with that ownership).
+Verified for real: built the image, wrote a file as the nextjs user,
+force-recreated the container (exactly what a redeploy does), confirmed
+the file was both still there AND still writable afterward. Fully torn
+down after; real local dev data confirmed unchanged (2 tenants, 11
+contacts).
+Junk-code sweep: no leftover console.log/debug statements beyond the
+one intentional mock-channel logger, no TODO/FIXME markers, no
+commented-out dead code, no stray scratch/test files or *.bak/*.old
+files in the repo, no hardcoded secrets in source (only prisma/seed.ts's
+local-dev-only fallback password, which is intentional and never used
+by seed.prod.ts). One pre-existing loose end flagged but not removed:
+the `ApiKey` model in schema.prisma is unused — a planned external-
+ingest endpoint (`/api/ingest`, mentioned in docs/BLUEPRINT.md) was
+never built. Left in place rather than deleted since removing a model
+is a real schema decision, not "cleanup" — the owner should decide
+whether to build the feature or drop the table.
 
 Work on exactly ONE phase item per session unless told otherwise.
 
