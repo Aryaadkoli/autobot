@@ -48,6 +48,16 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+    healthcheck:
+      # node's built-in fetch, not curl — the web image doesn't have
+      # curl installed and there's no reason to add a package just for
+      # this. Hits app/api/health/route.ts, the same endpoint you'd
+      # check by hand after a deploy.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
 
   worker:
@@ -70,7 +80,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data
       - caddyconfig:/config
-    depends_on: [web]
+    depends_on:
+      web: { condition: service_healthy }
     restart: unless-stopped
 
 volumes:
