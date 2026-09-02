@@ -2,27 +2,42 @@
 
 One-time setup to get Autobot live on `autobot.urvanidhi.com`, plus the
 commands you'll actually use afterward (deploying an update, checking
-logs, backing up, restoring). Written for the Oracle Cloud "Always Free"
-VM + Docker Compose setup this repo is built around — see
-`docs/BLUEPRINT.md` for why.
+logs, backing up, restoring). The Docker Compose setup this repo is
+built around (see `docs/BLUEPRINT.md` for why) is cloud-agnostic — it
+runs identically on any Ubuntu VM with a public IP and ports 80/443
+open. Originally planned for Oracle Cloud; switched to **Google Cloud's
+free tier (e2-micro)** when Oracle's signup got stuck. Nothing below
+Part 1, Step 1 changes based on that choice.
 
 ## Part 1 — one-time setup
 
 ### 1. Create the VM
 
-1. Sign up / log into [Oracle Cloud](https://cloud.oracle.com) (free tier).
-2. Create a Compute Instance:
-   - Image: **Ubuntu 22.04** or newer
-   - Shape: an "Always Free" eligible shape (either the micro x86 one,
-     or an Ampere ARM one if your account has that available — ARM
-     gives you much more RAM for free, worth checking)
-   - Add your SSH key (or let Oracle generate one for you to download)
-3. Once it's running, note its **public IP address**.
-4. In the instance's **Virtual Cloud Network → Security List** (or
-   Network Security Group), add ingress rules for TCP ports **80** and
-   **443** from anywhere (`0.0.0.0/0`) — Oracle's own cloud firewall
-   sits in front of the VM and blocks everything by default, separate
-   from the VM's own `ufw`.
+Using Google Cloud's free tier:
+
+1. Sign up / log into [Google Cloud Console](https://console.cloud.google.com).
+2. **Compute Engine → VM instances → Create Instance**
+3. **Region**: must be one of the three Always Free regions —
+   `us-west1` (Oregon), `us-central1` (Iowa), or `us-east1` (South
+   Carolina). Any other region bills real money for the same instance
+   — this is the one setting that matters most for staying free. Pick
+   whichever shows as available.
+4. **Machine type**: `e2-micro` — specifically this one. Anything
+   larger is outside the free tier.
+5. **Boot disk**: Ubuntu 22.04 LTS, **Standard persistent disk** (not
+   SSD — SSD isn't part of the free allowance), up to 30GB.
+6. **Firewall**: tick **Allow HTTP traffic** and **Allow HTTPS
+   traffic** — this is GCP's equivalent of Oracle's Security List, a
+   separate cloud-level firewall in front of the VM. Without this
+   checked, ports 80/443 stay blocked regardless of the VM's own `ufw`.
+7. Create it, wait ~30s, note its **external (public) IP address** —
+   shown right on the VM instances list.
+
+One real constraint worth knowing: the free e2-micro's network egress
+(data leaving the VM) is capped at 1GB/month to most destinations —
+fine for a small business's message volume today, worth watching if
+usage grows a lot (template images fetched by Meta's servers count as
+egress from this VM).
 
 ### 2. Point the domain at it
 

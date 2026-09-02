@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Run ONCE on a brand new Ubuntu VM (e.g. Oracle Cloud "Always Free"
-# instance) to get it ready to run Autobot. Safe to re-run — every step
-# checks whether it's already done before doing it again.
+# Run ONCE on a brand new Ubuntu VM (e.g. a free-tier instance on
+# Oracle Cloud or Google Cloud) to get it ready to run Autobot. Safe to
+# re-run — every step checks whether it's already done before doing it
+# again.
 #
 # Usage: ssh into the fresh VM, then:
 #   curl -fsSL https://raw.githubusercontent.com/<you>/<repo>/main/deploy/bootstrap.sh | bash
@@ -27,7 +28,7 @@ fi
 echo "==> Confirming the Docker Compose plugin is available"
 docker compose version
 
-echo "==> Setting up a swap file (Oracle's free-tier x86 shape has only"
+echo "==> Setting up a swap file (a typical free-tier shape has only"
 echo "    1GB RAM — a swap file prevents the Postgres+Next.js+worker"
 echo "    combo from getting OOM-killed under load)"
 if [ ! -f /swapfile ]; then
@@ -52,9 +53,10 @@ sudo ufw status
 echo ""
 echo "==> Done. Next steps:"
 echo "    1. Log out and back in (for the docker group to apply), or run: newgrp docker"
-echo "    2. Also open ports 80 and 443 in your Oracle Cloud instance's"
-echo "       Security List / Network Security Group (the VM-level ufw"
-echo "       rules above aren't enough by themselves on Oracle Cloud —"
-echo "       it has its own separate cloud firewall in front of the VM)."
+echo "    2. Also open ports 80 and 443 in your cloud provider's own"
+echo "       firewall (GCP: check 'Allow HTTP/HTTPS traffic' on the VM;"
+echo "       Oracle: add rules in the instance's Security List) — the"
+echo "       VM-level ufw rules above aren't enough by themselves, every"
+echo "       cloud provider has its own separate firewall in front of the VM."
 echo "    3. Clone the repo here and copy .env.production.example to .env,"
 echo "       filling in real values — see docs/RUNBOOK.md."
