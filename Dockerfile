@@ -36,6 +36,14 @@ COPY . .
 # actually connect to anything.
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
 RUN npx prisma generate
+# On a 1GB-RAM free-tier VM, `next build`'s default V8 heap sizing
+# under-detects available memory and crashes with "JavaScript heap out
+# of memory" before it ever touches the swap file deploy/bootstrap.sh
+# sets up — confirmed live on a real t3.micro. Raising max-old-space-size
+# explicitly lets it use that swap instead of self-limiting; the build
+# runs slower (swap is much slower than RAM) but completes instead of
+# crashing. Only affects this one build step, not the running app.
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 RUN npm run build
 
 # ---- web: minimal runtime image for the Next.js app ----
