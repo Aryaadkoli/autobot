@@ -5,6 +5,7 @@ import SettingsClient from "./settings-client";
 import WhatsAppConnection from "./whatsapp-connection";
 import SendingLimits from "./sending-limits";
 import RolesReference from "./roles-reference";
+import OrganizationsSection from "./organizations-section";
 
 export default async function SettingsPage() {
   const session = await requireSession();
@@ -58,6 +59,12 @@ export default async function SettingsPage() {
         </p>
       )}
 
+      {session.role === "OWNER" && (
+        <div className="mb-8">
+          <OrganizationsSection />
+        </div>
+      )}
+
       {seeSettings && (
         <>
           <WhatsAppConnection
@@ -93,6 +100,7 @@ export default async function SettingsPage() {
               .filter((r) => r.name !== "OWNER" && !r.deletedAt)
               .map((r) => ({ id: r.id, name: r.name }))}
             currentUserId={session.userId}
+            currentUserRole={session.role}
           />
         </div>
       )}

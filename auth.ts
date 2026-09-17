@@ -87,30 +87,17 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         const ok = await bcrypt.compare(password, account.passwordHash);
         if (!ok) return null;
 
-        const memberships = await prisma.user.findMany({
-          where: { accountId: account.id },
-          include: { tenant: { select: { name: true } }, role: { select: { id: true, name: true } } },
-        });
-
         return {
           id: account.id,
           email: account.email,
           name: account.name,
-          memberships: await Promise.all(
-            memberships.map(async (m) => ({
-              userId: m.id,
-              tenantId: m.tenantId,
-              tenantName: m.tenant.name,
-              role: m.role.name,
-              permissions: await computePermissions(m.role.id, m.role.name),
-            }))
-          ),
+          memberships: await loadMemberships(account.id),
         };
       },
     }),
   ],
   callbacks: {
-    jwt({ token, user, trigger, session }) {
+    async jwt({ token, user, trigger, session }) {
       // next-auth's JWT type is a nested re-export (see types/next-auth.d.ts)
       // that doesn't reliably accept ambient augmentation — cast once here
       // instead of `any`-ing every field access below.
@@ -125,12 +112,21 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         selectTenant(t, memberships.length === 1 ? memberships[0].tenantId : undefined, memberships);
       }
 
-      // Fired by unstable_update({ user: { tenantId } }) from the
-      // /select-tenant Server Action — swaps the active tenant on an
-      // already-issued token without a full re-login.
-      const requestedTenantId = (session as { user?: { tenantId?: string } } | undefined)?.user?.tenantId;
-      if (trigger === "update" && requestedTenantId) {
-        selectTenant(t, requestedTenantId, t.memberships ?? []);
+      // Fired by unstable_update({ user: { tenantId, refreshMemberships? } })
+      // — /select-tenant's Server Action swaps the active tenant on an
+      // already-issued token without a full re-login; the "create
+      // organization" route (app/api/organizations/route.ts) also sets
+      // refreshMemberships:true since that flow adds a BRAND NEW
+      // membership the token's existing t.memberships array doesn't know
+      // about yet — re-querying is the only way to pick it up short of a
+      // full re-login.
+      const update = (session as { user?: { tenantId?: string; refreshMemberships?: boolean } } | undefined)
+        ?.user;
+      if (trigger === "update" && update?.refreshMemberships && t.accountId) {
+        t.memberships = await loadMemberships(t.accountId);
+      }
+      if (trigger === "update" && update?.tenantId) {
+        selectTenant(t, update.tenantId, t.memberships ?? []);
       }
 
       return t;
@@ -155,6 +151,27 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     },
   },
 });
+
+// Shared by authorize() (fresh login) and the jwt callback's
+// refreshMemberships path (an already-signed-in Account gains a new
+// Tenant membership, e.g. via "create organization" in Settings, and
+// needs the token's membership list to catch up without a full
+// re-login).
+async function loadMemberships(accountId: string): Promise<Membership[]> {
+  const memberships = await prisma.user.findMany({
+    where: { accountId },
+    include: { tenant: { select: { name: true } }, role: { select: { id: true, name: true } } },
+  });
+  return Promise.all(
+    memberships.map(async (m) => ({
+      userId: m.id,
+      tenantId: m.tenantId,
+      tenantName: m.tenant.name,
+      role: m.role.name,
+      permissions: await computePermissions(m.role.id, m.role.name),
+    }))
+  );
+}
 
 function selectTenant(token: AppJWT, tenantId: string | undefined, memberships: Membership[]) {
   const match = tenantId ? memberships.find((m) => m.tenantId === tenantId) : undefined;

@@ -13,8 +13,8 @@ function navFor(permissions: PermissionMap) {
   const items = [
     { href: "/", label: "Overview", show: true },
     { href: "/contacts", label: "Leads", show: canView(permissions, "LEADS") },
-    { href: "/workflows", label: "Workflows", show: canView(permissions, "WORKFLOWS") },
     { href: "/templates", label: "Templates", show: canView(permissions, "TEMPLATES") },
+    { href: "/workflows", label: "Workflows", show: canView(permissions, "WORKFLOWS") },
     { href: "/campaigns", label: "Campaigns", show: canView(permissions, "CAMPAIGNS") },
     { href: "/analytics", label: "Analytics", show: canView(permissions, "ANALYTICS") },
     {

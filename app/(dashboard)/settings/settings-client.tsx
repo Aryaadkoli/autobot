@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import UserModal from "./user-modal";
+import { canRemoveTeamMember } from "@/lib/team-hierarchy";
 
 type TeamUser = { id: string; name: string; email: string; role: string };
 type AssignableRole = { id: string; name: string };
@@ -14,11 +15,13 @@ export default function SettingsClient({
   users,
   assignableRoles,
   currentUserId,
+  currentUserRole,
   canEdit,
 }: {
   users: TeamUser[];
   assignableRoles: AssignableRole[];
   currentUserId: string;
+  currentUserRole: string;
   canEdit: boolean;
 }) {
   const router = useRouter();
@@ -89,15 +92,17 @@ export default function SettingsClient({
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {canEdit && u.id !== currentUserId && (
-                    <button
-                      disabled={deletingId === u.id}
-                      onClick={() => handleDelete(u)}
-                      className="text-xs text-red-600 hover:underline cursor-pointer disabled:opacity-50"
-                    >
-                      {deletingId === u.id ? "Removing…" : "Remove"}
-                    </button>
-                  )}
+                  {canEdit &&
+                    u.id !== currentUserId &&
+                    canRemoveTeamMember(currentUserRole, u.role) && (
+                      <button
+                        disabled={deletingId === u.id}
+                        onClick={() => handleDelete(u)}
+                        className="text-xs text-red-600 hover:underline cursor-pointer disabled:opacity-50"
+                      >
+                        {deletingId === u.id ? "Removing…" : "Remove"}
+                      </button>
+                    )}
                 </td>
               </tr>
             ))}

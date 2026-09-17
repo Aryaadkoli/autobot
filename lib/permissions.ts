@@ -61,6 +61,13 @@ export function canEdit(permissions: PermissionMap, module: Module): boolean {
 // don't allow `action` on `module`, or null if the request should
 // proceed. Usage: `const denied = requirePermission(session, "LEADS",
 // "edit"); if (denied) return denied;`
+// Re-exported so server-side callers (e.g. app/api/users/[id]/route.ts)
+// can keep importing it from "@/lib/permissions" alongside canView/
+// canEdit — the real definition lives in lib/team-hierarchy.ts, which
+// has no Prisma import and is what the Settings client component
+// imports directly (this module isn't client-safe, see that file).
+export { canRemoveTeamMember } from "./team-hierarchy";
+
 export function requirePermission(
   session: { permissions: PermissionMap },
   module: Module,

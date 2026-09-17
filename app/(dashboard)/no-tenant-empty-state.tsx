@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { signOut } from "@/auth";
 import Mascot from "@/components/mascot";
+import CreateOrgButton from "./create-org-button";
 
 // Shown instead of the dashboard when an Account exists but has zero
 // tenant memberships — a real, reachable state (not just theoretical):
@@ -31,12 +31,7 @@ export default function NoTenantEmptyState({
         page.
       </p>
       <div className="mt-8 flex flex-col sm:flex-row items-center gap-3 opacity-0 [animation:fade-in-up_0.5s_ease-out_0.3s_forwards]">
-        <Link
-          href="/signup"
-          className="rounded-lg bg-amber-500 text-stone-950 text-sm font-medium px-5 py-2.5 hover:bg-amber-400 transition-colors"
-        >
-          Create your own business
-        </Link>
+        <CreateOrgButton />
         <form action={logout}>
           <button
             type="submit"

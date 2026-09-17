@@ -47,6 +47,26 @@ function slugify(name: string): string {
 // Tenant added to it (the exact "one email, two businesses" case
 // /select-tenant exists for) — its password must match, same rule as any
 // other Account access.
+// Shared by signup and the in-app "create another organization" flow —
+// both ultimately need a fresh Tenant, its three system Roles, and this
+// Account made OWNER of it.
+async function createTenantWithOwner(accountId: string, businessName: string) {
+  let slug = slugify(businessName);
+  let suffix = 1;
+  while (await prisma.tenant.findUnique({ where: { slug } })) {
+    suffix++;
+    slug = `${slugify(businessName)}-${suffix}`;
+  }
+
+  const tenant = await prisma.tenant.create({ data: { name: businessName, slug } });
+  const roles = await createSystemRoles(tenant.id);
+  await prisma.user.create({
+    data: { tenantId: tenant.id, accountId, roleId: roles.OWNER.id },
+  });
+
+  return tenant;
+}
+
 export async function signupNewBusiness({
   businessName,
   name,
@@ -59,19 +79,7 @@ export async function signupNewBusiness({
   password: string;
 }) {
   const { account, isNew } = await getOrCreateAccountForSignup(email, name, password);
-
-  let slug = slugify(businessName);
-  let suffix = 1;
-  while (await prisma.tenant.findUnique({ where: { slug } })) {
-    suffix++;
-    slug = `${slugify(businessName)}-${suffix}`;
-  }
-
-  const tenant = await prisma.tenant.create({ data: { name: businessName, slug } });
-  const roles = await createSystemRoles(tenant.id);
-  await prisma.user.create({
-    data: { tenantId: tenant.id, accountId: account.id, roleId: roles.OWNER.id },
-  });
+  const tenant = await createTenantWithOwner(account.id, businessName);
 
   await sendAccountEmail(
     email,
@@ -82,4 +90,32 @@ export async function signupNewBusiness({
   );
 
   return { tenant, account };
+}
+
+// The in-app equivalent, used from Settings by someone who's already
+// signed in and already an OWNER somewhere — no password re-entry needed
+// since their session already proves who they are. Route handler
+// (app/api/organizations/route.ts) restricts this to OWNER-role callers;
+// this function itself doesn't re-check that, same division of
+// responsibility as the rest of lib/accounts.ts.
+export async function createOrganizationForAccount({
+  accountId,
+  businessName,
+  name,
+  email,
+}: {
+  accountId: string;
+  businessName: string;
+  name: string;
+  email: string;
+}) {
+  const tenant = await createTenantWithOwner(accountId, businessName);
+
+  await sendAccountEmail(
+    email,
+    `${businessName} is ready on Autobot`,
+    `Hi ${name},\n\n${businessName} has been added to your Autobot login (${email}) as a new business you own. Switch to it anytime from the sidebar's "Switch business" link.`
+  );
+
+  return tenant;
 }

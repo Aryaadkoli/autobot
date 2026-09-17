@@ -1,6 +1,6 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission } from "@/lib/permissions";
+import { requirePermission, canRemoveTeamMember } from "@/lib/permissions";
 
 export async function DELETE(
   _req: Request,
@@ -34,9 +34,11 @@ export async function DELETE(
 
   // CO_OWNER can manage the team like an OWNER, except it can't remove
   // an OWNER or another CO_OWNER — that's the one thing kept OWNER-only,
-  // so a co-owner can never lock out the actual owner (or another
-  // co-owner) by removing their account.
-  if ((user.role.name === "OWNER" || user.role.name === "CO_OWNER") && session.role !== "OWNER") {
+  // so a co-owner (or anyone else with TEAM edit) can never lock out the
+  // actual owner, or another co-owner, by removing their account. Same
+  // rule the Settings UI uses to hide the Remove button in the first
+  // place (see lib/permissions.ts's canRemoveTeamMember).
+  if (!canRemoveTeamMember(session.role, user.role.name)) {
     return Response.json(
       { error: "Only the owner can remove an owner or co-owner" },
       { status: 403 }
