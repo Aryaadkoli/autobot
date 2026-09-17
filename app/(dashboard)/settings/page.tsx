@@ -45,22 +45,24 @@ export default async function SettingsPage() {
     }),
   ]);
 
-  const nothingToShow = !seeSettings && !seeTeam;
+  // Organizations is always shown (open to everyone regardless of role
+  // or module permission — see organizations-section.tsx), so this only
+  // needs to flag when the *other* sections (WhatsApp/limits, Team) are
+  // both hidden, not the whole page.
+  const restOfPageHidden = !seeSettings && !seeTeam;
 
   return (
     <div>
       <h1 className="text-2xl font-semibold text-stone-900 mb-6">Settings</h1>
 
-      {nothingToShow && (
-        <p className="text-sm text-stone-500 bg-white rounded-2xl border border-stone-200 p-6 max-w-2xl">
-          You don&apos;t have access to any settings. Ask the account owner if you need something changed here.
-        </p>
-      )}
+      <div className="mb-8">
+        <OrganizationsSection />
+      </div>
 
-      {session.role === "OWNER" && (
-        <div className="mb-8">
-          <OrganizationsSection />
-        </div>
+      {restOfPageHidden && (
+        <p className="text-sm text-stone-500 bg-white rounded-2xl border border-stone-200 p-6 max-w-2xl">
+          You don&apos;t have access to WhatsApp connection, sending limits, or team settings. Ask the account owner if you need something changed here.
+        </p>
       )}
 
       {seeSettings && (

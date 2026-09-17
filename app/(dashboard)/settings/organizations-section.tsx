@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import CreateOrgModal from "./create-org-modal";
 
-// Only rendered for an OWNER (see settings/page.tsx) — creating a new
-// organization makes you its owner, so this isn't offered to CO_OWNER or
-// anyone else, same "owners only" framing as granting CO_OWNER elsewhere.
+// Shown to everyone on the Settings page (see settings/page.tsx) —
+// creating a new organization only ever creates a brand-new tenant the
+// creator becomes OWNER of, so it can't affect any tenant they're
+// already in and isn't restricted by role.
 export default function OrganizationsSection() {
   const router = useRouter();
   const [showCreate, setShowCreate] = useState(false);

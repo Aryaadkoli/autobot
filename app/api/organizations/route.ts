@@ -8,26 +8,19 @@ const OrganizationInputSchema = z.object({
 
 // Lets an already-signed-in Account spin up a new Tenant without
 // re-entering a password (the session already proves who they are) —
-// either an OWNER adding another business, or a zero-membership Account
-// (NoTenantEmptyState's "Create your own business") making its first.
-// Not open to CO_OWNER/MEMBER/custom roles who already belong to a
-// tenant but aren't its OWNER — same "owners only" framing the rest of
-// the app uses for tenant-shaping actions (e.g. only an OWNER can grant
-// CO_OWNER).
+// open to any authenticated Account regardless of its role in its
+// current tenant(s), including a zero-membership Account
+// (NoTenantEmptyState's "Create your own business" making its first).
+// Deliberately not gated by role: creating a new org only ever creates
+// a brand-new, empty tenant that the creator becomes OWNER of — it
+// can't touch or affect any tenant the caller already belongs to, so
+// there's nothing here that needs owner-only protection.
 export async function POST(req: Request) {
   let session;
   try {
     session = await requireAccountSession();
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
-  const eligible = session.role === "OWNER" || session.memberships.length === 0;
-  if (!eligible) {
-    return Response.json(
-      { error: "Only an owner can create a new organization" },
-      { status: 403 }
-    );
   }
 
   const parsed = OrganizationInputSchema.safeParse(await req.json());
