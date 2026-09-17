@@ -27,9 +27,6 @@ function sameDay(a: Date, b: Date) {
   );
 }
 
-// A glanceable month grid so planning multiple crops/products across
-// different dates (the mango-farmers-in-Jan, smart-meters-in-Mar case) is
-// something the owner can actually see at once, not just read row by row.
 export default function ScheduleCalendar({
   scheduled,
   onCancel,

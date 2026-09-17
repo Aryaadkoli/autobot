@@ -11,9 +11,7 @@ const PermissionsPatchSchema = z.object({
   ),
 });
 
-// Update a role's per-module permissions. OWNER/CO_OWNER don't have (or
-// need) any RolePermission rows — they bypass the whole system — so this
-// only makes sense for MEMBER or a custom role, both blocked below.
+// OWNER/CO_OWNER bypass RolePermission entirely, so this only applies to MEMBER or a custom role (both blocked below).
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -68,14 +66,7 @@ export async function PATCH(
   return Response.json({ id });
 }
 
-// DELETE a custom role. Two real constraints:
-//  - System roles (OWNER/CO_OWNER/MEMBER) can never be deleted — the
-//    app's own OWNER checks depend on that exact role existing on every
-//    tenant.
-//  - A role still assigned to someone is soft-deleted (deletedAt set)
-//    instead of removed: whoever has it keeps working exactly as before,
-//    it just stops being offered when assigning a role to someone new.
-//    Only an unused role is actually removed from the table.
+// System roles can never be deleted (OWNER checks depend on them existing); a role still in use is soft-deleted, only an unused one is actually removed.
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }

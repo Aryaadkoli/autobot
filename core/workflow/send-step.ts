@@ -9,13 +9,7 @@ export type SendStepOutcome =
   | { outcome: "sent" | "failed" | "suppressed" }
   | { outcome: "deferred"; until: Date };
 
-// The workflow engine's send — distinct from core/channels/send.ts's
-// sendTemplateToContact() because it goes through the FULL gatekeeper
-// (including cross-service priority), rewrites links for click tracking,
-// and uses the idempotency dedupeKey rule (`${instanceId}:${stepId}`,
-// CLAUDE.md rule #2) instead of a random one, since a workflow step can
-// legitimately be retried (a delayed job firing twice must never
-// double-send).
+// Distinct from core/channels/send.ts's sendTemplateToContact(): full gatekeeper (incl. cross-service priority), link rewriting, and a deterministic `${instanceId}:${stepId}` dedupeKey so a retried delayed job never double-sends.
 export async function sendWorkflowStep({
   instance,
   contact,
@@ -54,8 +48,7 @@ export async function sendWorkflowStep({
     return { outcome: "suppressed" };
   }
 
-  // Create the Message row first (QUEUED) so link-wrapping has a
-  // messageId to attach Link rows to, then deliver the wrapped body.
+  // Message row must exist first so link-wrapping has a messageId to attach Link rows to.
   const message = await prisma.message.create({
     data: {
       tenantId: instance.tenantId,

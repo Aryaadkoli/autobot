@@ -1,8 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-// One Prisma client for the whole app (avoids exhausting DB connections
-// when Next.js hot-reloads in development).
+// One Prisma client for the whole app (avoids exhausting DB connections on Next.js hot-reload).
 const globalForPrisma = globalThis as unknown as {
   prisma?: ReturnType<typeof buildClient>;
   prismaBase?: PrismaClient;
@@ -10,34 +9,13 @@ const globalForPrisma = globalThis as unknown as {
 
 const adapter = new PrismaPg(process.env.DATABASE_URL as string);
 
-// Soft delete: Contact, Tag, MessageTemplate, Workflow, and User (team
-// membership) are never actually removed from the database — "deleting"
-// one of these just sets deletedAt. This is Prisma's own documented
-// recipe for it (a query extension): `base` below is the real,
-// unextended client, used only inside the extension itself to perform
-// the actual update — everywhere else in the app imports the extended
-// `prisma` export and just calls .delete()/.findMany() normally, with
-// no idea any of this is happening.
-//
-// findUnique/findUniqueOrThrow are deliberately NOT filtered here (same
-// as Prisma's own recipe) — the handful of call sites that use them are
-// uniqueness pre-checks (e.g. "does this phone number already exist"),
-// where whether a soft-deleted row should still count is a real
-// business decision made case-by-case at the call site, not something
-// safe to decide globally.
-//
-// Written out per-model (rather than looped over a model-name array) so
-// Prisma's extension types can infer each callback's `args`/`query`
-// shape correctly — a generic loop erases that to `unknown`.
+// Soft delete via Prisma's documented query-extension recipe: `base` is the real unextended client (used only inside the extension to perform the actual update); the rest of the app imports the extended `prisma` export unaware .delete()/.findMany() are rewritten.
+// findUnique/findUniqueOrThrow are deliberately left unfiltered — whether a soft-deleted row counts there is a per-call-site decision (e.g. uniqueness pre-checks), not a global one.
+// Written out per-model rather than looped, so the extension's `args`/`query` types infer correctly (a generic loop erases them to `unknown`).
 const base = globalForPrisma.prismaBase ?? new PrismaClient({ adapter });
 if (process.env.NODE_ENV !== "production") globalForPrisma.prismaBase = base;
 
-// Escape hatch for the rare, deliberate case that needs to see a
-// soft-deleted row the normal `prisma` export would hide — e.g.
-// resurrecting a removed teammate's User row on re-invite (see
-// app/api/users/route.ts) instead of failing on the real unique
-// constraint. Reach for this only when you specifically mean "including
-// deleted," never as a shortcut around the extension below.
+// Escape hatch to see soft-deleted rows the normal `prisma` export hides — e.g. resurrecting a removed teammate's User row on re-invite (app/api/users/route.ts) instead of hitting the unique constraint.
 export const prismaIncludingDeleted = base;
 
 function buildClient() {

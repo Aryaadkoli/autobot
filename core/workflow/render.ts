@@ -1,6 +1,4 @@
-// Fills placeholders in a MessageTemplate.body from a contact's fields/
-// attributes. Framework-free — reused by the worker once the workflow
-// engine (docs/BLUEPRINT.md §2, Phase 4) exists.
+// Framework-free — reused by the worker as well as Next.js code.
 export type TemplateVariable = { pos: number; source: string };
 
 type ContactLike = {
@@ -20,9 +18,7 @@ function resolveSource(source: string, contact: ContactLike): string {
   return "";
 }
 
-// Named-token style ({{name}}, {{phone}}, {{city}}) — used for free-form
-// sends (Email, or WhatsApp replies within an open session) and for
-// the send-test preview.
+// Named-token style ({{name}}, {{phone}}, {{city}}) — used for free-form sends and the send-test preview.
 export function renderTemplate(body: string, contact: ContactLike): string {
   return body.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key: string) => {
     if (key === "name") return contact.name ?? "";
@@ -32,9 +28,7 @@ export function renderTemplate(body: string, contact: ContactLike): string {
   });
 }
 
-// Numbered-placeholder style ({{1}}, {{2}}, ...) — matches how Meta
-// requires approved WhatsApp templates to be written. Returns the ordered
-// parameter list the Cloud API's template.components[type=body] expects.
+// Numbered-placeholder style ({{1}}, {{2}}, ...) — matches Meta's approved WhatsApp template format.
 export function buildBodyParameters(
   variables: TemplateVariable[],
   contact: ContactLike

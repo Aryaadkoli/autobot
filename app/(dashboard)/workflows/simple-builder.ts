@@ -1,23 +1,4 @@
-// Converts between the plain-language step list a non-technical owner
-// edits (SimpleStep[] + Ending[]) and the JSON WorkflowDefinition the
-// engine actually runs (core/workflow/schema.ts) — so nobody has to write
-// JSON by hand for the common case: a chain of "send this, wait, maybe
-// react to a reply/click" steps, possibly finishing with more than one
-// distinct outcome (e.g. "Replied" vs "No response"), optionally skipping
-// ahead based on the lead's stage.
-//
-// What this CAN represent: any number of send/wait/branch steps chained
-// forward, any number of named endings, reply/click reactions that either
-// do nothing, jump to a later step, end with a specific outcome, or pivot
-// to a different workflow — everything the mango-farmer / mango + reply
-// example needs.
-//
-// What it can't (falls back to raw JSON, tryParseSimpleWorkflow returns
-// null): backward jumps or loops, branch conditions on anything other
-// than lead stage, wait durations finer than minutes, more than one
-// reaction per event on the same wait step, or a workflow definition that
-// doesn't reduce to one straight-line chain (e.g. two branch steps
-// merging back together).
+// Converts between the guided SimpleStep[]/Ending[] model and the engine's JSON WorkflowDefinition; loops, non-stage branches, sub-minute waits, or multi-reaction wait steps fall back to raw JSON instead (tryParseSimpleWorkflow returns null).
 
 export type Ending = { id: string; label: string };
 
@@ -25,7 +6,7 @@ export type Reaction =
   | { kind: "none" }
   | { kind: "end"; endingId: string }
   | { kind: "skip"; targetIndex: number }
-  | { kind: "workflow"; workflowName: string }; // pivot to a different workflow
+  | { kind: "workflow"; workflowName: string }; // pivots to a different workflow
 
 export type BranchTarget = { kind: "end"; endingId: string } | { kind: "skip"; targetIndex: number };
 
@@ -135,8 +116,7 @@ const DURATION_RE = /^(\d+)(m|h|d)$/;
 
 export type SimpleWorkflow = { steps: SimpleStep[]; endings: Ending[] };
 
-// Returns null the moment anything doesn't fit the guided model — never
-// throws, always safe to call speculatively.
+// Returns null (never throws) the moment anything doesn't fit the guided model.
 export function tryParseSimpleWorkflow(definition: {
   entry: string;
   steps: Record<string, unknown>;
@@ -146,9 +126,7 @@ export function tryParseSimpleWorkflow(definition: {
   const allEndIds = Object.keys(rawSteps).filter((id) => rawSteps[id]?.type === "end");
   if (allEndIds.length === 0) return null;
 
-  // Walk the main chain from entry via next/else until an "end" step —
-  // that becomes the default/primary ending (what a step reaches by
-  // simply falling through with no special reaction).
+  // Walk the main chain from entry via next/else to the first "end" step — that's the default ending.
   const chain: string[] = [];
   const visited = new Set<string>();
   let cursor = definition.entry;

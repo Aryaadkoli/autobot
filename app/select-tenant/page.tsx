@@ -2,21 +2,11 @@ import { redirect } from "next/navigation";
 import { requireAccountSession, unstable_update, signOut } from "@/auth";
 import Mascot from "@/components/mascot";
 
-// Reached whenever the signed-in Account has more than one Tenant
-// membership and hasn't picked one for this session yet — the "modern,
-// different kind of dashboard" the owner asked for, distinct from the
-// regular sidebar layout since there's no tenant context to render one
-// in yet. Auto-selection of a lone membership happens in auth.ts's jwt
-// callback at sign-in time; this page only ever needs to render when
-// there's a real choice to make.
+// Shown only when the Account has 2+ Tenant memberships and none is selected yet; a lone membership auto-selects at sign-in (auth.ts).
 export default async function SelectTenantPage() {
   const session = await requireAccountSession();
 
-  // Only actually a choice when there's more than one membership — a
-  // single-membership account gets auto-selected at sign-in (auth.ts),
-  // and zero memberships is the empty state the dashboard layout shows,
-  // not this page. Reachable even with a tenant already selected — that's
-  // the sidebar's "Switch business" link.
+  // Also reachable with a tenant already selected, via the sidebar's "Switch business" link.
   if (session.memberships.length <= 1) redirect("/");
 
   async function logout() {

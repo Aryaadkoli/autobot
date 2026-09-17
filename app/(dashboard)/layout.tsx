@@ -5,10 +5,7 @@ import { canView, type PermissionMap } from "@/lib/permissions";
 import Sidebar from "./sidebar";
 import NoTenantEmptyState from "./no-tenant-empty-state";
 
-// Overview has no module of its own — it's a summary of several, so
-// everyone with a tenant sees it. Everything else is hidden entirely
-// (not just disabled) when the signed-in role can't view that module —
-// no point linking to a page that'll show nothing.
+// Overview has no module of its own (a summary of several) so it's always shown; other links are hidden, not disabled, when unviewable.
 function navFor(permissions: PermissionMap) {
   const items = [
     { href: "/", label: "Overview", show: true },
@@ -33,9 +30,6 @@ export default async function DashboardLayout({
 }) {
   const account = await requireAccountSession();
 
-  // No tenant selected yet — either there's nothing to select (render the
-  // empty state right here, no sidebar makes sense without a tenant) or
-  // there's a real choice to make (send them to pick one).
   if (!account.tenantId) {
     if (account.memberships.length === 0) {
       return <NoTenantEmptyState name={account.name} email={account.email} />;

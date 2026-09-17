@@ -1,11 +1,7 @@
 import { Queue } from "bullmq";
 import { redisConnection } from "@/lib/redis";
 
-// One queue for every time-based wakeup a workflow instance needs: a
-// "wait" step's timer, or a retry after the gatekeeper deferred a send
-// (quiet hours / daily cap / a higher-priority flow). The worker
-// (worker/index.ts, or the in-process copy in instrumentation.ts for dev)
-// consumes this and calls core/workflow/engine.ts's wakeFromTimer().
+// Every time-based wakeup (wait-step timer or a deferred-send retry) goes through this queue; worker/index.ts (or instrumentation.ts's dev copy) consumes it via engine.ts's wakeFromTimer().
 export const advanceQueue = new Queue("workflow-advance", {
   connection: redisConnection,
 });

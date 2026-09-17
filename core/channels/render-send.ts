@@ -55,10 +55,7 @@ export async function deliverRendered(
   return { result, adapterName: adapter.name };
 }
 
-// The actual "fill in the template and call the channel adapter" step,
-// shared by every send path that doesn't need to rewrite links first
-// (Campaigns' immediate/scheduled sends) — only the gatekeeper checks and
-// dedupeKey around it differ per caller.
+// Shared by every send path that doesn't need to rewrite links first (Campaigns' immediate/scheduled sends) — only gatekeeper checks/dedupeKey differ per caller.
 export async function renderAndSend(
   template: MessageTemplate,
   tenant: Tenant,

@@ -48,8 +48,7 @@ export async function POST(req: Request) {
       ...(tagId ? { tags: { some: { tagId } } } : {}),
       ...(stage ? { attributes: { path: ["stage"], equals: stage } } : {}),
     },
-    // No hard cap on the query — runCampaign() truncates for sending, but
-    // the campaign history should still reflect the true match count.
+    // No cap here — runCampaign() truncates for sending, but history should reflect the true match count.
     orderBy: { createdAt: "desc" },
   });
 

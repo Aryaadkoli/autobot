@@ -2,9 +2,7 @@ import type { Contact, MessageTemplate, Tenant } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { sendTemplateToContact } from "./send";
 
-// Stopgap until the real queue-based worker (docs/BLUEPRINT.md Phase 4,
-// needs Redis) exists — run again with a different filter, or after 24h
-// for anyone the daily cap skipped, to reach more than this in one day.
+// Stopgap until the real queue-based worker exists — run again with a different filter, or after 24h, to reach more than this in one day.
 const MAX_RECIPIENTS = 200;
 const DELAY_MS = 150;
 
@@ -21,9 +19,6 @@ export type CampaignRunResult = {
   truncated: boolean;
 };
 
-// Sends one template to a list of contacts (already deduped by the caller)
-// and records a Campaign history row. Shared by both targeting modes —
-// tag/stage filter and uploaded-list.
 export async function runCampaign({
   template,
   tenant,
@@ -84,9 +79,7 @@ function describeSource(name: string, tagName?: string, stage?: string) {
   return `Scheduled: ${name}${parts.length ? ` (${parts.join(", ")})` : ""}`;
 }
 
-// e.g. every January for mango season, every March for smart-meter renewals —
-// after a recurring ScheduledCampaign fires, queue up the next occurrence
-// instead of making the owner recreate it by hand each time.
+// After a recurring ScheduledCampaign fires, queue the next occurrence instead of making the owner recreate it by hand.
 function nextOccurrence(from: Date, recurrence: "MONTHLY" | "YEARLY"): Date {
   const next = new Date(from);
   if (recurrence === "MONTHLY") next.setMonth(next.getMonth() + 1);
@@ -94,10 +87,7 @@ function nextOccurrence(from: Date, recurrence: "MONTHLY" | "YEARLY"): Date {
   return next;
 }
 
-// Polled by the in-process scheduler (instrumentation.ts) roughly once a
-// minute. Picks up every PENDING ScheduledCampaign whose time has come,
-// runs it through the same runCampaign() as an immediate send, and marks
-// it SENT (or FAILED, with the error recorded — never left stuck PENDING).
+// Polled by the in-process scheduler (instrumentation.ts) roughly once a minute; marks each PENDING row SENT or FAILED, never left stuck.
 export async function runDueScheduledCampaigns(): Promise<number> {
   const due = await prisma.scheduledCampaign.findMany({
     where: { status: "PENDING", scheduledFor: { lte: new Date() } },

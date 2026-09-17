@@ -6,10 +6,6 @@ import { parseDurationMs } from "./schema";
 import { sendWorkflowStep } from "./send-step";
 import { advanceQueue, advanceJobId } from "./queues";
 
-// enroll(), advance(), handleEvent(), pivot() — the heart of the workflow
-// engine (docs/BLUEPRINT.md core/workflow/engine.ts). Framework-free: no
-// Next.js imports, callable from API routes and from the worker alike.
-
 function getDefinition(workflow: { definition: unknown }): WorkflowDefinition {
   return WorkflowDefinitionSchema.parse(workflow.definition);
 }
@@ -20,9 +16,7 @@ function getStep(def: WorkflowDefinition, stepId: string): Step {
   return step;
 }
 
-// Starts a contact on a workflow. Idempotent — re-enrolling a contact
-// that already has an ACTIVE instance of this exact workflow returns the
-// existing instance instead of starting a second, competing one.
+// Idempotent — re-enrolling a contact with an ACTIVE instance of this workflow returns it instead of starting a second, competing one.
 export async function enroll(
   tenantId: string,
   workflowId: string,
@@ -40,12 +34,7 @@ export async function enroll(
   return instance.id;
 }
 
-// Runs the instance forward from targetStepId (or its current position)
-// until it hits a "wait" step (schedules a timer, returns), an "end" step
-// (marks COMPLETED, returns), or a "send" step the gatekeeper deferred
-// (schedules a retry timer, returns). "send"/"branch" steps chain
-// synchronously in the same call — a workflow with no waits runs to
-// completion in one advanceInstance() call, same as a Campaign send.
+// Runs forward through send/branch steps synchronously until it hits a wait (schedules a timer), an end (marks COMPLETED), or a deferred send (schedules a retry).
 export async function advanceInstance(instanceId: string, targetStepId?: string): Promise<void> {
   const instance = await prisma.sequenceInstance.findUniqueOrThrow({
     where: { id: instanceId },
@@ -119,10 +108,7 @@ async function scheduleWake(
   });
 }
 
-// Called by the worker when a delayed job fires. Re-validates the
-// instance is still ACTIVE and still actually sitting at the step the job
-// was scheduled for — a stale job (superseded by an event that already
-// moved the instance on) is a safe no-op rather than a double-advance.
+// Re-validates the instance is still ACTIVE and at the step the job was scheduled for — a stale job (superseded by an event) is a safe no-op, not a double-advance.
 export async function wakeFromTimer(instanceId: string): Promise<void> {
   const instance = await prisma.sequenceInstance.findUnique({
     where: { id: instanceId },
@@ -141,11 +127,7 @@ export async function wakeFromTimer(instanceId: string): Promise<void> {
   }
 }
 
-// Called whenever a behavior Event is recorded for a contact (a reply, a
-// link click, an opt-out...) — checks every ACTIVE instance currently
-// waiting on a step that listens for this event type, and pivots/jumps
-// accordingly. Cheap: a contact rarely has more than one or two active
-// flows at once.
+// Called whenever a behavior Event is recorded for a contact — checks every ACTIVE instance waiting on a step listening for this event type and pivots/jumps accordingly.
 export async function handleEvent(
   tenantId: string,
   contactId: string,
@@ -179,9 +161,7 @@ async function cancelPendingJob(instanceId: string, stepId: string): Promise<voi
   await advanceQueue.remove(advanceJobId(instanceId, stepId)).catch(() => {});
 }
 
-// Kills the current sequence and starts a sub-flow instead — e.g. a lead
-// clicks the link mid-drip, so the marketing sequence stops and a "ready
-// to order" sales sub-flow begins for the same contact.
+// Kills the current sequence and starts a sub-flow instead — e.g. a lead clicks the link, so the marketing sequence stops and a sales sub-flow begins.
 export async function pivot(
   tenantId: string,
   instanceId: string,
@@ -194,8 +174,7 @@ export async function pivot(
   });
 
   if (!subflow) {
-    // Sub-flow isn't set up (or isn't ACTIVE) — end the pivot attempt
-    // rather than silently pretending nothing happened.
+    // Sub-flow isn't set up (or isn't ACTIVE) — end the pivot rather than silently pretending nothing happened.
     await prisma.sequenceInstance.update({
       where: { id: instanceId },
       data: { status: "CANCELLED", endedAt: new Date(), wakeAt: null, bullJobId: null },

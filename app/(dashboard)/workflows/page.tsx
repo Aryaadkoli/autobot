@@ -4,13 +4,6 @@ import { canView } from "@/lib/permissions";
 import NoModuleAccess from "../no-module-access";
 import WorkflowsClient from "./workflows-client";
 
-// Phase 4 — the real workflow engine (core/workflow/engine.ts): multi-step
-// sequences with wait/branch/pivot, backed by BullMQ (core/workflow/queues.ts)
-// and a worker (worker/index.ts, also started in-process for dev — see
-// instrumentation.ts). Authored via a plain-language step builder
-// (simple-builder.ts) — no JSON required for the common case; an
-// "Advanced" JSON mode is still there as an escape hatch for anything the
-// guided builder can't express.
 export default async function WorkflowsPage() {
   const session = await requireSession();
   const { tenantId } = session;
@@ -34,8 +27,7 @@ export default async function WorkflowsPage() {
     }),
   ]);
 
-  // Active-instance counts separately — Prisma's _count can't filter by a
-  // relation's field in the same query as an unfiltered count.
+  // Separate query: Prisma's _count can't filter by a relation's field alongside an unfiltered count.
   const activeCounts = await prisma.sequenceInstance.groupBy({
     by: ["workflowId"],
     where: { tenantId, status: "ACTIVE" },

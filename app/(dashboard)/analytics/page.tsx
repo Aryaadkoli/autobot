@@ -5,10 +5,6 @@ import NoModuleAccess from "../no-module-access";
 import { outcomeLabelFromDefinition } from "@/core/workflow/outcome-label";
 import AnalyticsClient from "./analytics-client";
 
-// All queries below filter by tenantId (session.tenantId) — non-negotiable
-// rule #1 in CLAUDE.md. This page is read-only: it aggregates the
-// Message/Event/Campaign rows every other part of the app already writes,
-// no new data collection needed.
 export default async function AnalyticsPage() {
   const session = await requireSession();
   const { tenantId } = session;
@@ -73,8 +69,7 @@ export default async function AnalyticsPage() {
   const totalAttempts = sent + delivered + read + failed;
   const confirmedDelivered = delivered + read;
 
-  // Fill in the last 14 days so the trend chart has no gaps, even on days
-  // with zero sends.
+  // Fill in the last 14 days so the trend chart has no gaps on zero-send days.
   const trendMap = new Map(
     trendRows.map((r) => [r.day.toISOString().slice(0, 10), Number(r.count)])
   );
@@ -88,8 +83,6 @@ export default async function AnalyticsPage() {
 
   const isLiveConnected = Boolean(tenant.waPhoneNumberId && tenant.waAccessTokenEnc);
 
-  // Top templates by volume — same status buckets as the headline cards,
-  // just grouped per template instead of tenant-wide.
   const perTemplate = new Map<string, { sent: number; delivered: number; failed: number }>();
   for (const g of templateGroups) {
     if (!g.templateId) continue;
@@ -113,8 +106,6 @@ export default async function AnalyticsPage() {
     .sort((a, b) => b.sent - a.sent)
     .slice(0, 5);
 
-  // Workflow outcomes — walks each workflow's finished instances back to
-  // the "end" step definition to get a human label.
   const workflowOutcomes = workflowsWithInstances
     .filter((w) => w.instances.length > 0)
     .map((w) => {

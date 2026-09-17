@@ -2,10 +2,7 @@ import Link from "next/link";
 import { signOut } from "@/auth";
 import Mascot from "@/components/mascot";
 
-// Shown instead of the dashboard when an Account exists but has zero
-// tenant memberships — a real, reachable state (not just theoretical):
-// someone signed up but hasn't been added to a business yet, or an
-// account was created purely for review/testing.
+// Shown when an Account exists but has zero tenant memberships (e.g. signed up but not yet added to a business).
 export default function NoTenantEmptyState({
   name,
   email,

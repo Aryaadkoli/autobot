@@ -32,10 +32,7 @@ export async function DELETE(
     return Response.json({ error: "Teammate not found" }, { status: 404 });
   }
 
-  // CO_OWNER can manage the team like an OWNER, except it can't remove
-  // an OWNER or another CO_OWNER — that's the one thing kept OWNER-only,
-  // so a co-owner can never lock out the actual owner (or another
-  // co-owner) by removing their account.
+  // Removing an OWNER/CO_OWNER is kept OWNER-only so a co-owner can never lock out the owner (or another co-owner).
   if ((user.role.name === "OWNER" || user.role.name === "CO_OWNER") && session.role !== "OWNER") {
     return Response.json(
       { error: "Only the owner can remove an owner or co-owner" },

@@ -1,5 +1,4 @@
-// columnMapping values follow the convention from docs/BLUEPRINT.md:
-// "phone" | "name" | "businessType" | "skip" | "attributes.<key>"
+// columnMapping values: "phone" | "name" | "businessType" | "skip" | "attributes.<key>" (see docs/BLUEPRINT.md).
 export type ColumnMapping = Record<string, string>;
 
 export type MappedContact = {

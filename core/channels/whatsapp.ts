@@ -48,10 +48,7 @@ export type PhoneNumberInfoResult =
   | { ok: true; verifiedName: string; displayPhoneNumber: string; qualityRating: string }
   | { ok: false; error: string };
 
-// Confirms credentials actually work and shows basic account health —
-// without spending on a real message send. Used by Settings' "Test
-// connection" button, the first thing anyone will want to check once
-// credentials are plugged in.
+// Confirms credentials work and shows account health without spending on a real message send.
 export async function getPhoneNumberInfo(
   phoneNumberId: string,
   accessToken: string
@@ -82,9 +79,7 @@ export type TemplateApprovalResult =
   | { ok: true; status: string; category?: string }
   | { ok: false; error: string };
 
-// Looks up a template's REAL approval status directly from Meta Business
-// Manager, so the app's own record reflects reality instead of assuming
-// approved. Used by Templates' "Check approval" button.
+// Looks up a template's REAL approval status from Meta, instead of assuming approved.
 export async function checkTemplateApproval(
   wabaId: string,
   templateName: string,
@@ -115,9 +110,7 @@ export async function checkTemplateApproval(
   }
 }
 
-// Meta WhatsApp Cloud API adapter — graph.facebook.com/{version}/{phoneId}/messages.
-// Selected by core/channels/index.ts once a tenant has real credentials
-// (waPhoneNumberId + decrypted waAccessTokenEnc) saved via Settings.
+// Selected by core/channels/index.ts once a tenant has real credentials saved via Settings.
 export class WhatsAppAdapter implements ChannelAdapter {
   readonly name = "whatsapp";
 
@@ -127,9 +120,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
   ) {}
 
   async send(message: OutgoingMessage): Promise<ProviderResult> {
-    // Free-form text only works within an open 24h customer-service window
-    // (e.g. replying to an inbound message). Any cold outbound send must
-    // use an approved template — see OutgoingMessage.templateName.
+    // Cold outbound sends must use an approved template — free-form text only works within an open 24h customer-service window.
     const payload = message.templateName
       ? buildTemplatePayload(message)
       : buildTextPayload(message);

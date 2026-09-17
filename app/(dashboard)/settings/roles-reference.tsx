@@ -28,10 +28,7 @@ function emptyPermState(): PermState {
   return Object.fromEntries(MODULES.map((m) => [m.key, { canView: false, canEdit: false }]));
 }
 
-// Rendered whenever the signed-in role can see the TEAM module (see
-// settings/page.tsx) — canEdit controls whether the add-role/delete
-// controls and the "choose what a new role can view" form appear, or
-// this is just a reference list.
+// canEdit controls whether add-role/delete controls appear, or this is just a reference list.
 export default function RolesReference({ roles, canEdit }: { roles: RoleRow[]; canEdit: boolean }) {
   const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
@@ -45,8 +42,7 @@ export default function RolesReference({ roles, canEdit }: { roles: RoleRow[]; c
     setPerms((prev) => {
       const current = prev[moduleKey];
       const next = { ...current, [field]: !current[field] };
-      // Editing implies viewing — doesn't make sense to grant edit
-      // without also being able to see the module.
+      // Editing implies viewing.
       if (field === "canEdit" && next.canEdit) next.canView = true;
       if (field === "canView" && !next.canView) next.canEdit = false;
       return { ...prev, [moduleKey]: next };

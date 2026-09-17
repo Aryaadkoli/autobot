@@ -73,14 +73,12 @@ export default function CampaignsClient({
   const [when, setWhen] = useState<"now" | "later">("now");
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
 
-  // Filter mode
   const [tagId, setTagId] = useState("");
   const [stage, setStage] = useState("");
   const [preview, setPreview] = useState<{ count: number; sample: string[] } | null>(
     null
   );
 
-  // Schedule for later (filter mode only)
   const [scheduleName, setScheduleName] = useState("");
   const [scheduleAt, setScheduleAt] = useState("");
   const [scheduleRecurrence, setScheduleRecurrence] = useState<
@@ -90,7 +88,6 @@ export default function CampaignsClient({
     "calendar"
   );
 
-  // Upload mode
   const [uploadStep, setUploadStep] = useState<"upload" | "map">("upload");
   const [uploadPreview, setUploadPreview] = useState<UploadPreview | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
@@ -122,7 +119,6 @@ export default function CampaignsClient({
   const selectedTemplate = templates.find((t) => t.id === templateId);
   const hasPhoneMapped = Object.values(mapping).includes("phone");
 
-  // Recipients to show in the right-hand panel.
   const uploadRecipients = (() => {
     if (!uploadPreview) return [];
     const nameHeader = Object.entries(mapping).find(([, v]) => v === "name")?.[0];

@@ -8,13 +8,7 @@ export type GateDecision =
   | { decision: "DEFER"; until: Date; reason: string }
   | { decision: "SUPPRESS"; reason: string };
 
-// The full gatekeeper (docs/BLUEPRINT.md §3, CLAUDE.md rule #5): every
-// check the workflow engine's send steps go through, in order, before
-// anything reaches a channel adapter. Campaigns still use the lighter
-// core/channels/send.ts checks (opt-out + quiet hours + daily cap) since
-// an immediate/scheduled campaign has no "service priority" of its own —
-// this full version is specifically for workflow-driven sends, which can
-// compete with each other for the same contact.
+// Workflow-driven sends only — Campaigns use the lighter core/channels/send.ts checks since they have no "service priority" of their own to compete on.
 export async function canSend({
   contact,
   tenant,
@@ -60,10 +54,7 @@ export async function canSend({
       include: { service: true },
     });
     if (thisWorkflow) {
-      // Does a different ACTIVE flow with a higher-priority service (lower
-      // Service.priority number — e.g. PAYMENT=10 beats LEAD=50) already
-      // have this contact right now? If so, defer — don't compete for
-      // their attention.
+      // Lower Service.priority number wins (e.g. PAYMENT=10 beats LEAD=50) — defer if a higher-priority flow already has this contact.
       const blocker = await prisma.sequenceInstance.findFirst({
         where: {
           tenantId: contact.tenantId,

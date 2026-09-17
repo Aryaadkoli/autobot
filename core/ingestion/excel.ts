@@ -7,8 +7,6 @@ export type ParsedSheet = {
 
 const MAX_ROWS = 5000;
 
-// Parses an uploaded .xlsx/.csv buffer into a header row + record rows.
-// Framework-free: no Next.js imports, safe to reuse from the worker later.
 export function parseWorkbook(buffer: Buffer): ParsedSheet {
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const sheetName = workbook.SheetNames[0];

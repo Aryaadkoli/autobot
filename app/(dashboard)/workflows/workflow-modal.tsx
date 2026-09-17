@@ -28,14 +28,11 @@ function defaultStep(kind: SimpleStep["kind"], templates: { name: string; channe
   if (kind === "wait") {
     return { kind: "wait", amount: 48, unit: "h", onReply: { kind: "none" }, onClick: { kind: "none" } };
   }
-  // "End with outcome: <default>" is always a valid target regardless of
-  // position — a fixed step index default could point earlier/nowhere.
+  // Default to the first ending, not a step index — a fixed index could point earlier/nowhere.
   return { kind: "branch", stageEquals: "interested", then: { kind: "end", endingId: endings[0]?.id ?? "done" } };
 }
 
-// A step is "referenced" if another step's reaction/branch points at it
-// by index — deletion is blocked rather than silently breaking that
-// reference, so the guided model never ends up pointing at nothing.
+// Deletion is blocked when another step's reaction/branch targets this index, so nothing points at nothing.
 function referencingSteps(steps: SimpleStep[], targetIndex: number): number[] {
   const refs: number[] = [];
   steps.forEach((s, i) => {

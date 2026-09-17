@@ -1,9 +1,6 @@
 import { auth } from "@/auth";
 
-// Protects every page except /login, /signup, and static assets.
-// Not logged in -> redirected to /login. (/select-tenant and the
-// no-tenant empty state both still require a real session — they're
-// reached only via the dashboard layout's gate, not exempted here.)
+// /select-tenant and the no-tenant empty state still require a real session — they're reached only via the dashboard layout's gate, not exempted here.
 const PUBLIC_PATHS = new Set(["/login", "/signup"]);
 
 export default auth((req) => {

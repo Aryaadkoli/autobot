@@ -10,8 +10,7 @@ export const TemplateInputSchema = z.object({
   channel: z.enum(["WHATSAPP", "EMAIL"]),
   body: z.string().trim().min(1, "Message body is required").max(2000),
   metaCategory: z.enum(["MARKETING", "UTILITY", "AUTHENTICATION"]).optional(),
-  // Must exactly match a template already approved in Meta Business
-  // Manager — approval happens on Meta's side, this app doesn't submit it.
+  // Must exactly match a template already approved in Meta Business Manager — this app doesn't submit templates for approval.
   metaTemplateName: z.string().trim().max(512).optional(),
   metaLanguage: z.string().trim().max(10).optional(),
   mediaUrl: z.union([z.string().trim().url(), z.literal("")]).optional(),

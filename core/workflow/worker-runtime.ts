@@ -2,12 +2,7 @@ import { Worker, type Job } from "bullmq";
 import { redisConnection } from "@/lib/redis";
 import { wakeFromTimer } from "./engine";
 
-// One consumer for the "workflow-advance" queue, shared by two entry
-// points: worker/index.ts (a real standalone process — what
-// docs/BLUEPRINT.md's architecture calls for, and what runs in
-// production) and instrumentation.ts (starts the same consumer inside
-// the Next.js dev server itself, so `npm run dev` alone is enough to see
-// workflows actually advance locally — no second terminal required).
+// Shared consumer for the "workflow-advance" queue: worker/index.ts runs it standalone in production; instrumentation.ts starts a copy in-process so `npm run dev` alone advances workflows locally.
 export function startWorkflowWorker(): Worker {
   const worker = new Worker(
     "workflow-advance",

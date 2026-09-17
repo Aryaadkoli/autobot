@@ -74,10 +74,7 @@ export async function POST(req: Request) {
         mediaUrl: mediaUrl || undefined,
         mediaType: mediaUrl ? mediaType : undefined,
         variables,
-        // No real Meta/DLT approval pipeline in this app yet — mark usable
-        // immediately so mock/test sends work. A real cold WhatsApp send
-        // still requires metaTemplateName to reference an ALREADY-approved
-        // Meta template; this flag doesn't grant that approval.
+        // No real approval pipeline yet — this flag doesn't grant actual Meta approval, just lets mock/test sends work.
         approvalStatus: "APPROVED",
       },
     });
