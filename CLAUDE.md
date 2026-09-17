@@ -834,6 +834,70 @@ never built. Left in place rather than deleted since removing a model
 is a real schema decision, not "cleanup" — the owner should decide
 whether to build the feature or drop the table.
 
+**Autobot is live in production**, as of a later session:
+**https://autobot.urvanidhi.com** — real HTTPS (Caddy auto-cert), real
+database, real owner login (aryaadkoli@gmail.com), dad added as
+CO_OWNER (urvanidhi@gmail.com / login name "Raghavendra").
+
+Hosting ended up on **AWS**, not Oracle or GCP, after a real signup
+saga: Oracle's Always Free signup hit an unresolvable generic
+fraud-check error (tried retrying, disabling VPN, a different card —
+never cleared); pivoted to GCP (e2-micro, free forever, but no India
+region — only 3 US regions are Always-Free-eligible, verified against
+Google's own docs) as the safe fallback; then the owner's dad got AWS's
+new-account $200/6-month credit (not the old 12-month 750hrs/month
+tier — that changed for accounts created after July 2025) working
+first, and since the actual expected usage (frequent image-heavy
+WhatsApp campaigns to farmers nationwide) would have blown well past
+GCP's 1GB free egress/month anyway, AWS's much larger free egress
+during the credit window made it the better real fit despite the
+6-month clock. **Concrete instance**: t3.micro, Mumbai (ap-south-1),
+Ubuntu 26.04 LTS, 50GB gp3 EBS, Elastic IP `13.127.38.161` (permanent —
+allocated specifically so a future instance stop/start never silently
+breaks DNS), credit specification set to Standard (not Unlimited, to
+avoid any surprise CPU-burst billing). **Hard deadline**: the $200
+credit / 6-month window ends **~March 2, 2027** — revisit then
+(pay, migrate to Oracle if its signup ever clears, or migrate to GCP).
+
+Two real deployment bugs found only by actually running this on the
+real VM, not caught by any local testing:
+  - **Docker build OOM on the 1GB-RAM instance**: `next build`'s
+    default V8 heap sizing crashes with "JavaScript heap out of
+    memory" before ever touching the swap file bootstrap.sh sets up.
+    Fixed with `NODE_OPTIONS=--max-old-space-size=2048` in the
+    Dockerfile's builder stage (Step 1 in the file) — makes the build
+    ~20 minutes slower (swap is slow) but it completes instead of
+    dying.
+  - **`public/` directory didn't exist on a fresh clone**: git never
+    tracks empty directories, and `public/` locally only ever
+    contained `uploads/` (gitignored) — so a truly fresh `git clone`
+    produced no `public/` at all, and the Dockerfile's
+    `COPY --from=builder .../public ./public` failed with "not found."
+    Only ever worked locally because that directory already physically
+    existed here from prior testing. Fixed with `public/.gitkeep`,
+    verified against an actual fresh clone before telling the owner to
+    retry.
+`docs/RUNBOOK.md`'s VM-creation section still shows GCP's console
+steps in writing (the actual deploy walked through AWS's console live
+instead, successfully, since the underlying Docker/Caddy setup is
+fully cloud-agnostic) — cosmetic gap, worth updating next time this
+file is touched.
+
+A later same-day session added, verified (clean tsc/lint/build,
+no new migration needed), and confirmed safe to deploy:
+**multi-organization creation** — an OWNER can spin up a second
+business in-session (Settings → Organizations, `POST
+/api/organizations`, refreshes the JWT via `unstable_update` so the
+new tenant is usable without a re-login) — and a **team-removal
+hierarchy** fix: only the literal OWNER can remove an OWNER or
+CO_OWNER, enforced in one shared place (`lib/team-hierarchy.ts`'s
+`canRemoveTeamMember()`) used by both the API and the Settings UI (so
+the Remove button doesn't even render where it'd just 403). That
+session's merge had real conflicts across auth.ts/lib/accounts.ts/
+lib/permissions.ts (a parallel comment-trimming pass touched the same
+files) — checked the resolution kept both sets of changes correctly
+before calling it safe.
+
 Work on exactly ONE phase item per session unless told otherwise.
 
 ## How to work with me (the owner)
