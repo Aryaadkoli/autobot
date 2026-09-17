@@ -1,8 +1,6 @@
 import type { CSSProperties } from "react";
 
-// The Autobot mascot: shapes fly into place on load, then idles
-// (bob, blink, sway, pulse) — built entirely from divs, no images/SVGs.
-// Designed for dark backgrounds (stone-900/950).
+// Built entirely from divs (no images/SVGs); designed for dark backgrounds (stone-900/950).
 export default function Mascot({
   scale = 1,
   className = "",

@@ -34,11 +34,7 @@ export async function POST(req: Request) {
   const tagError = await assertTagsBelongToTenant(tenantId, tagIds);
   if (tagError) return Response.json({ error: tagError }, { status: 400 });
 
-  // (tenantId, phone) is a real, unconditional unique constraint — a
-  // previously-deleted contact's phone number still physically occupies
-  // it (findUnique isn't soft-delete-filtered, so this sees it either
-  // way). A live match blocks creation as before; a soft-deleted match
-  // is resurrected instead of trying to insert a duplicate.
+  // (tenantId, phone) stays unique even across soft-deletes, so a soft-deleted match is resurrected here instead of hitting a duplicate-key error.
   const existing = await prisma.contact.findUnique({
     where: { tenantId_phone: { tenantId, phone } },
   });

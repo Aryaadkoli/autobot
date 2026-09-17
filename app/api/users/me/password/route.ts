@@ -9,9 +9,7 @@ const BodySchema = z.object({
   newPassword: z.string().min(8, "New password must be at least 8 characters"),
 });
 
-// Same brute-force protection as login (lib/rate-limit.ts) — this
-// endpoint is another place someone gets to guess a password against a
-// known-correct answer, so it needs the same throttle.
+// Same brute-force throttle as login (lib/rate-limit.ts) — this also lets someone guess against a known-correct password.
 const ATTEMPT_LIMIT = 5;
 const ATTEMPT_WINDOW_SECONDS = 15 * 60;
 

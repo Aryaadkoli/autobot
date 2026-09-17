@@ -3,12 +3,7 @@ import { prisma } from "./db";
 import { sendAccountEmail } from "./mailer";
 import { createSystemRoles } from "./roles";
 
-// Shared by /api/signup and Settings' "add teammate" — both ultimately
-// need "find or create the global Account for this email," they just
-// differ in what happens if it already exists.
-
-// Signup: the person typing this email is claiming to know its password
-// (whether it's brand new or already exists as another tenant's owner).
+// Signup claims to know this email's password (new or an existing owner's) — verified below; invite (further down) can't prove that, so it reuses the Account as-is instead.
 export async function getOrCreateAccountForSignup(email: string, name: string, password: string) {
   const existing = await prisma.account.findUnique({ where: { email } });
   if (existing) {
@@ -25,10 +20,7 @@ export async function getOrCreateAccountForSignup(email: string, name: string, p
   return { account, isNew: true };
 }
 
-// Add-teammate: the OWNER is typing someone else's email — they can't
-// prove that person's password, so an existing Account is reused as-is
-// (the invitee logs in with whatever they already use elsewhere), and a
-// brand new one is created with the temp password the owner set.
+// Existing Account is reused as-is (invitee keeps their own password); only a brand-new email gets the owner's temp password.
 export async function getOrCreateAccountForInvite(email: string, name: string, tempPassword: string) {
   const existing = await prisma.account.findUnique({ where: { email } });
   if (existing) return { account: existing, isNew: false };
@@ -41,15 +33,7 @@ function slugify(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "business";
 }
 
-// The "Create an account" flow from the login page — signs up a brand
-// new business (Tenant) under this email's Account, creating the Account
-// too if it doesn't exist yet. An existing Account just gets a second
-// Tenant added to it (the exact "one email, two businesses" case
-// /select-tenant exists for) — its password must match, same rule as any
-// other Account access.
-// Shared by signup and the in-app "create another organization" flow —
-// both ultimately need a fresh Tenant, its three system Roles, and this
-// Account made OWNER of it.
+// Shared by signup and the in-app "create org" flow — both need a fresh Tenant, its 3 system Roles, and this Account made OWNER.
 async function createTenantWithOwner(accountId: string, businessName: string) {
   let slug = slugify(businessName);
   let suffix = 1;
@@ -67,6 +51,7 @@ async function createTenantWithOwner(accountId: string, businessName: string) {
   return tenant;
 }
 
+// The public "Create an account" flow — an existing Account just gets a second Tenant added to it (the "one email, two businesses" case /select-tenant exists for); password must still match.
 export async function signupNewBusiness({
   businessName,
   name,
@@ -92,12 +77,7 @@ export async function signupNewBusiness({
   return { tenant, account };
 }
 
-// The in-app equivalent, used from Settings by someone who's already
-// signed in and already an OWNER somewhere — no password re-entry needed
-// since their session already proves who they are. Route handler
-// (app/api/organizations/route.ts) restricts this to OWNER-role callers;
-// this function itself doesn't re-check that, same division of
-// responsibility as the rest of lib/accounts.ts.
+// In-app equivalent used from Settings/the empty state — no password re-entry needed; eligibility is checked by the caller (app/api/organizations/route.ts), not here.
 export async function createOrganizationForAccount({
   accountId,
   businessName,

@@ -32,12 +32,7 @@ export async function DELETE(
     return Response.json({ error: "Teammate not found" }, { status: 404 });
   }
 
-  // CO_OWNER can manage the team like an OWNER, except it can't remove
-  // an OWNER or another CO_OWNER — that's the one thing kept OWNER-only,
-  // so a co-owner (or anyone else with TEAM edit) can never lock out the
-  // actual owner, or another co-owner, by removing their account. Same
-  // rule the Settings UI uses to hide the Remove button in the first
-  // place (see lib/permissions.ts's canRemoveTeamMember).
+  // Removing an OWNER/CO_OWNER is kept OWNER-only so a co-owner can never lock out the owner (or another co-owner) — same rule the Settings UI uses to hide the Remove button (lib/team-hierarchy.ts).
   if (!canRemoveTeamMember(session.role, user.role.name)) {
     return Response.json(
       { error: "Only the owner can remove an owner or co-owner" },

@@ -121,9 +121,7 @@ export async function DELETE(
     prisma.campaign.count({ where: { templateId: id } }),
   ]);
   if (campaignCount > 0 && usageCount === 0) {
-    // A campaign that skipped everyone (e.g. all opted out) leaves no
-    // Message rows but still references the template — block deletion
-    // here too, rather than letting it fail as a raw FK violation.
+    // A campaign that skipped everyone (e.g. all opted out) leaves no Message rows but still references the template.
     return Response.json(
       {
         error: `This template was used in ${campaignCount} campaign${

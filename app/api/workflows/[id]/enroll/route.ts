@@ -61,9 +61,7 @@ export async function POST(
     return Response.json({ enrolled: 0, alreadyActive: 0, total: 0 });
   }
 
-  // Cap per-run like Campaigns (core/channels/campaign.ts) — this runs
-  // each contact's first step(s) synchronously, so an unbounded batch
-  // could hold the request open a long time.
+  // Capped like Campaigns — first step(s) run synchronously per contact, so an unbounded batch could hold the request open a long time.
   const MAX = 200;
   const targeted = contacts.slice(0, MAX);
 

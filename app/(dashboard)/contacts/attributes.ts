@@ -1,6 +1,4 @@
-// Internal/bookkeeping keys that already have dedicated UI elsewhere
-// (stage has its own badge, source is import bookkeeping) — hidden from
-// the generic "Details" list so it only shows meaningful business data.
+// stage/source have dedicated UI elsewhere, so hide them from the generic "Details" list.
 const HIDDEN_KEYS = new Set(["stage", "source"]);
 
 export function formatAttributeLabel(key: string): string {

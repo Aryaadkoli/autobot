@@ -8,12 +8,7 @@ import Mascot from "@/components/mascot";
 import { signupNewBusiness } from "@/lib/accounts";
 import { checkRateLimit } from "@/lib/rate-limit";
 
-// Same throttle shape as login/password-change (lib/rate-limit.ts) —
-// this endpoint was the one place left with no abuse protection at all:
-// unauthenticated, and signupNewBusiness()'s "wrong password for an
-// existing email" error also confirms whether an email is already
-// registered, which makes it scriptable for both spam-tenant creation
-// and account-existence probing without this.
+// Throttled like login/password-change: unauthenticated, and the "wrong password for an existing email" error doubles as an account-existence oracle without this.
 const SIGNUP_ATTEMPT_LIMIT = 5;
 const SIGNUP_ATTEMPT_WINDOW_SECONDS = 15 * 60;
 

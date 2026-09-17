@@ -107,12 +107,7 @@ export async function PATCH(
   if (tagError) return Response.json({ error: tagError }, { status: 400 });
 
   if (phone !== existing.phone) {
-    // Only a live clash is reported here. A soft-deleted contact still
-    // physically holds its phone number (real unique constraint, see
-    // schema.prisma) — that rarer case isn't resurrected here like a
-    // fresh create is (contacts/route.ts); it falls through to the
-    // update below, which hits the same constraint and is caught there
-    // with the same error.
+    // Only a live clash is reported here — a soft-deleted match isn't resurrected on edit like it is on create (contacts/route.ts); it falls through to the same constraint error on update below.
     const clash = await prisma.contact.findUnique({
       where: { tenantId_phone: { tenantId, phone } },
     });
@@ -210,13 +205,7 @@ export async function DELETE(
     return Response.json({ error: "Lead not found" }, { status: 404 });
   }
 
-  // Soft delete (see lib/db.ts) — this contact's messages, events, and
-  // workflow history are left exactly as they are, just no longer
-  // reachable through a hidden contact. Previously this hard-deleted
-  // all of that first (required back when .delete() really deleted the
-  // row, to satisfy ON DELETE RESTRICT foreign keys) — that cascade is
-  // gone now on purpose, since wiping real history is the opposite of
-  // what "soft" delete is supposed to mean.
+  // Soft delete (see lib/db.ts) — messages/events/workflow history are kept, not cascaded away, since wiping history defeats the point of "soft".
   await prisma.contact.delete({ where: { id } });
 
   return Response.json({ id });

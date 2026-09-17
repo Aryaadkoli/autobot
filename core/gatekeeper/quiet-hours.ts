@@ -1,7 +1,3 @@
-// Non-negotiable rule #7 (CLAUDE.md): timezone-aware sends, respect tenant
-// quiet hours. Tenant.quietHoursStart/End have existed since the initial
-// schema but were never enforced anywhere — this closes that gap without
-// needing the Phase 4 worker (no queue/defer, just skip like the daily cap).
 export function currentHourInTimezone(timezone: string, now = new Date()): number {
   try {
     const parts = new Intl.DateTimeFormat("en-US", {

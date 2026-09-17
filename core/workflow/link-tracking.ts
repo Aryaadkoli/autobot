@@ -3,12 +3,7 @@ import { prisma } from "@/lib/db";
 
 const URL_RE = /https?:\/\/[^\s<>"')]+/g;
 
-// "Every outbound URL is rewritten to /r/{token} so clicks are trackable
-// Events" (CLAUDE.md §6) — only applied to workflow sends for now, since
-// that's where a LINK_CLICKED branch actually matters (a Campaign send
-// has nowhere to react to a click). Requires the Message row to already
-// exist (Link.messageId is a required FK), so this runs between creating
-// the Message and actually delivering it.
+// Only applied to workflow sends, since that's where a LINK_CLICKED branch actually matters. Requires the Message row to already exist (Link.messageId is a required FK), so this runs between creating the Message and delivering it.
 export async function wrapLinksForTracking(
   body: string,
   tenantId: string,

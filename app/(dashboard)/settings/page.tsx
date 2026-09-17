@@ -16,9 +16,7 @@ export default async function SettingsPage() {
   const editSettings = canEdit(session.permissions, "SETTINGS");
 
   const [membershipRows, roleRows, tenant] = await Promise.all([
-    // Only someone who can see the team section needs every teammate's
-    // identity loaded — no point querying it for someone who won't be
-    // shown it.
+    // Skip the query entirely for someone who won't be shown the team section.
     seeTeam
       ? prisma.user.findMany({
           where: { tenantId: session.tenantId },

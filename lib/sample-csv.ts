@@ -1,6 +1,4 @@
-// Shared by the Imports wizard and the Campaigns "upload a list" flow —
-// both offer the same "download a sample CSV" starting point. Browser-only
-// (Blob/URL/document), safe to import from any client component.
+// Browser-only (Blob/URL/document) — safe to import from any client component.
 export function downloadSampleLeadsCsv(filename = "leads-template.csv") {
   const headers = [
     "Mobile No",

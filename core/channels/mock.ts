@@ -1,10 +1,7 @@
 import { randomUUID } from "crypto";
 import type { ChannelAdapter, OutgoingMessage, ProviderResult } from "./types";
 
-// Stands in for a real provider until Meta/Brevo credentials exist.
-// Always "succeeds" so the rest of the pipeline (Message rows, Events,
-// the Activity timeline) can be built and demoed before any external
-// account is set up. Never used once a real adapter is configured.
+// Always "succeeds" so the rest of the pipeline can be built/demoed before real credentials exist.
 export class MockAdapter implements ChannelAdapter {
   readonly name = "mock";
 

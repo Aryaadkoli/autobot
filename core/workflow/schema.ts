@@ -94,10 +94,7 @@ export const WorkflowDefinitionSchema = z.object({
 });
 export type WorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
 
-// Beyond shape validation: every step reference (entry, next, then/else,
-// listen[].step) must point at a step that actually exists, or the engine
-// would throw mid-run for a lead days after enrollment — catch it at
-// save time instead.
+// Every step reference must point at a step that exists, or the engine would throw mid-run for a lead days after enrollment — catch it at save time instead.
 export function validateWorkflowDefinition(def: WorkflowDefinition): string[] {
   const errors: string[] = [];
   const stepIds = new Set(Object.keys(def.steps));

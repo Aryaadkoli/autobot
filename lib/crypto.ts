@@ -1,9 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
 
-// Encrypts channel credentials (WhatsApp/email API tokens) at rest,
-// per docs/BLUEPRINT.md. AES-256-GCM via Node's built-in crypto — no extra
-// dependency needed. Key comes from CREDENTIALS_KEY (any passphrase string;
-// scrypt derives a proper 32-byte key from it).
+// AES-256-GCM via Node's built-in crypto; CREDENTIALS_KEY passphrase is stretched to a 32-byte key via scrypt.
 const ALGO = "aes-256-gcm";
 
 function getKey(): Buffer {

@@ -13,19 +13,11 @@ function fullPermissions(): PermissionMap {
   return Object.fromEntries(MODULES.map((m) => [m, { canView: true, canEdit: true }])) as PermissionMap;
 }
 
-// OWNER and CO_OWNER bypass the permission system entirely — full
-// view+edit on everything, no RolePermission rows needed for them.
-// Every other role (MEMBER, or a custom one) is governed by whatever
-// rows actually exist; a module with no row is no access, same as
-// canView/canEdit both false.
+// OWNER/CO_OWNER bypass the permission system entirely (full access, no RolePermission rows needed); everything else is governed by whatever rows actually exist.
 export function isOwnerTier(roleName: string): boolean {
   return roleName === "OWNER" || roleName === "CO_OWNER";
 }
 
-// A sane starting point for a freshly-created MEMBER role or a new
-// custom role that didn't specify its own permissions: can see the
-// day-to-day work areas, can't edit anything, no visibility into the
-// team or WhatsApp/sending settings.
 export function defaultMemberPermissions(): PermissionMap {
   const perms = emptyPermissions();
   for (const m of ["LEADS", "TEMPLATES", "CAMPAIGNS", "WORKFLOWS", "ANALYTICS"] as Module[]) {
@@ -34,11 +26,7 @@ export function defaultMemberPermissions(): PermissionMap {
   return perms;
 }
 
-// Computes the effective permission map for a role — used both when
-// building the session at login (auth.ts embeds this in the JWT so
-// every request's permission check is a JWT read, not a DB query) and
-// anywhere else that needs a fresh read (e.g. right after an owner
-// edits a role's permissions, before the affected users next log in).
+// Embedded in the JWT at login (auth.ts) so most permission checks are a JWT read, not a DB query; also called for a fresh read right after an owner edits a role.
 export async function computePermissions(roleId: string, roleName: string): Promise<PermissionMap> {
   if (isOwnerTier(roleName)) return fullPermissions();
   const rows = await prisma.rolePermission.findMany({ where: { roleId } });
@@ -57,17 +45,10 @@ export function canEdit(permissions: PermissionMap, module: Module): boolean {
   return permissions[module]?.canEdit ?? false;
 }
 
-// For API routes: returns a 403 Response if the session's permissions
-// don't allow `action` on `module`, or null if the request should
-// proceed. Usage: `const denied = requirePermission(session, "LEADS",
-// "edit"); if (denied) return denied;`
-// Re-exported so server-side callers (e.g. app/api/users/[id]/route.ts)
-// can keep importing it from "@/lib/permissions" alongside canView/
-// canEdit — the real definition lives in lib/team-hierarchy.ts, which
-// has no Prisma import and is what the Settings client component
-// imports directly (this module isn't client-safe, see that file).
+// Re-exported for server-side callers (real definition in lib/team-hierarchy.ts, which has no Prisma import so the client-side Settings UI can import it directly too).
 export { canRemoveTeamMember } from "./team-hierarchy";
 
+// Returns a 403 Response if disallowed, or null if the request should proceed.
 export function requirePermission(
   session: { permissions: PermissionMap },
   module: Module,

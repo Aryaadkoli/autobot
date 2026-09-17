@@ -1,13 +1,8 @@
 import { prisma } from "@/lib/db";
 import { handleEvent } from "@/core/workflow/engine";
 
-// Public, unauthenticated — this is the redirect a lead's phone actually
-// hits when they tap a link in a WhatsApp message. Records a
-// LINK_CLICKED event (which can pivot/advance a waiting workflow
-// instance, see core/workflow/engine.ts handleEvent) and 302s them to the
-// real destination. Unknown/expired tokens fall back to the site root
-// rather than erroring, since this URL is out in the world on someone's
-// phone.
+// Public, unauthenticated: unknown/expired tokens redirect to the site root rather than erroring,
+// since this URL is out in the world on someone's phone.
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ token: string }> }

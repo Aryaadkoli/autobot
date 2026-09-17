@@ -10,11 +10,7 @@ export type SendOutcome =
   | { status: "failed"; messageId: string; renderedBody: string; error: string }
   | { status: "skipped"; reason: string };
 
-// The one place that actually sends a rendered template to a contact —
-// used by both "send test message" and Campaigns, so every send path gets
-// the same opt-out, quiet-hours and daily-cap checks. This is a
-// gatekeeper-lite: cross-service priority (docs/BLUEPRINT.md §3) is still
-// Phase 4/5 — it needs the worker to defer/retry rather than just skip.
+// Gatekeeper-lite: opt-out/quiet-hours/daily-cap only — cross-service priority needs the worker to defer/retry, not just skip.
 export async function sendTemplateToContact({
   template,
   tenant,

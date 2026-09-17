@@ -1,6 +1,3 @@
-// Evaluates a TagRule.condition tree (see prisma/schema.prisma TagRule comment)
-// against a contact's attributes. Framework-free, pure function.
-
 type Leaf = { attr: string; op: string; value?: unknown };
 type Node = { all: ConditionNode[] } | { any: ConditionNode[] } | Leaf;
 export type ConditionNode = Node;

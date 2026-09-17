@@ -27,9 +27,6 @@ function decodeReaction(v: string): Reaction {
   return { kind: "workflow", workflowName: v.slice(3) };
 }
 
-// Shared by "if they reply" and "if they click a link" — both can end
-// the sequence with a specific outcome, skip ahead to a later step, or
-// pivot into a different workflow entirely.
 function ReactionSelect({
   value,
   index,

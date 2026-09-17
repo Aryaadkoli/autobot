@@ -7,17 +7,12 @@ import { SYSTEM_ROLE_NAMES } from "@/lib/roles";
 
 const RoleInputSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(50),
-  // What this role can see/do per module — e.g. {"LEADS":{"canView":true,"canEdit":false}}.
-  // Any module left out defaults to no access. This is how an owner
-  // "chooses what they can view" for a brand new role.
+  // e.g. {"LEADS":{"canView":true,"canEdit":false}} — a module left out defaults to no access.
   permissions: z
     .record(z.string(), z.object({ canView: z.boolean().optional(), canEdit: z.boolean().optional() }))
     .optional(),
 });
 
-// Same TEAM permission as team-member management — a CO_OWNER can do
-// this too (see lib/permissions.ts), a plain MEMBER or custom role can't
-// unless explicitly given canEdit on TEAM.
 export async function POST(req: Request) {
   let session;
   try {
@@ -51,10 +46,7 @@ export async function POST(req: Request) {
     canEdit: Boolean(permInput[m]?.canEdit),
   }));
 
-  // Role's (tenantId, name) is a real, unconditional unique constraint —
-  // if this name was used by a role that's since been soft-deleted, that
-  // row still physically occupies it. Resurrect it (with the new
-  // permissions, replacing whatever it had before) instead of failing.
+  // (tenantId, name) stays unique across soft-deletes, so resurrect a matching soft-deleted role instead of failing.
   const existingByName = await prisma.role.findFirst({ where: { tenantId: session.tenantId, name } });
   if (existingByName && !existingByName.deletedAt) {
     return Response.json({ error: "A role with this name already exists" }, { status: 409 });

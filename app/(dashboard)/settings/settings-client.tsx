@@ -8,9 +8,7 @@ import { canRemoveTeamMember } from "@/lib/team-hierarchy";
 type TeamUser = { id: string; name: string; email: string; role: string };
 type AssignableRole = { id: string; name: string };
 
-// Only rendered for someone with view access to the TEAM module (see
-// settings/page.tsx) — canEdit controls whether they can act on it or
-// are just looking (e.g. a role with TEAM view but not edit).
+// canEdit controls whether they can act on it or are just looking (e.g. TEAM view but not edit).
 export default function SettingsClient({
   users,
   assignableRoles,

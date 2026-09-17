@@ -49,9 +49,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Template not found" }, { status: 404 });
   }
 
-  // Dedupe on phone, create/update leads, apply TagRules — same pipeline
-  // as the Imports page. This is what "look for duplicates and add to
-  // leads automatically" actually is: one shared, already-tested function.
+  // Same dedupe/upsert/TagRules pipeline as the Imports page — shared, already-tested function.
   const importResult = await importContacts({
     tenantId: session.tenantId,
     rows,

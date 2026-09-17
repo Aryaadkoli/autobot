@@ -11,15 +11,9 @@ export default async function OverviewPage() {
   const session = await requireSession();
   const { tenantId, name } = session;
 
-  // This page has no module of its own — it's a summary of several — so
-  // it's shown to everyone with a tenant. But its content genuinely
-  // includes other modules' data (lead names/phone numbers in the
-  // activity feed, message/campaign stats, workflow counts), so each
-  // section below is gated by, and its query skipped for, whichever
-  // module it actually belongs to. A role with LEADS view=false must
-  // never see a lead's name here just because this page has no gate of
-  // its own — that's a real leak this fixes (recentEvents used to
-  // include contact.name/phone unconditionally).
+  // This page has no module gate of its own, but its content includes other
+  // modules' data — each section (and its query) is gated per-module so a
+  // role without LEADS view can't see lead names via the activity feed.
   const seeLeads = canView(session.permissions, "LEADS");
   const seeCampaigns = canView(session.permissions, "CAMPAIGNS");
   const seeWorkflows = canView(session.permissions, "WORKFLOWS");

@@ -1,16 +1,4 @@
-// Starts two background loops once when the server boots:
-// 1. The scheduled-campaign poller — a stand-in for a real queue-based
-//    sweep (there's no recurring "check every N seconds" job type in
-//    BullMQ that fits this well, so it stays a plain interval).
-// 2. A copy of the workflow-advance worker (core/workflow/worker-runtime)
-//    — the REAL worker process is worker/index.ts (run via `npm run
-//    worker`, what production uses), but starting one here too means
-//    `npm run dev` alone is enough to see workflows actually advance
-//    locally, no second terminal required.
-// Runs only in the Node.js runtime (not Edge), and guards against
-// Next.js/Turbopack calling register() more than once (e.g. across dev
-// hot-reloads) with a global flag, the same pattern lib/db.ts uses for
-// the Prisma singleton.
+// Starts the scheduled-campaign poller (a plain interval — no BullMQ job type fits a recurring sweep well) and a dev copy of the workflow-advance worker, so `npm run dev` alone advances workflows with no second terminal. Guards against register() firing more than once across dev hot-reloads with a global flag, same pattern as lib/db.ts's Prisma singleton.
 const CHECK_INTERVAL_MS = Number(process.env.SCHEDULER_INTERVAL_MS) || 60_000;
 
 export async function register() {

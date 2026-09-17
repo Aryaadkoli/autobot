@@ -2,8 +2,7 @@
 
 import { slugifyHeader } from "@/core/ingestion/mapper";
 
-// Shared by the Imports wizard and the Campaigns "upload a list" flow —
-// both need the same "which column is phone/name/..." mapping step.
+// Shared by the Imports wizard and the Campaigns "upload a list" flow.
 export default function ColumnMappingTable({
   headers,
   sampleRow,

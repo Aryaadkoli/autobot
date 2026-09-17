@@ -52,9 +52,7 @@ export async function POST(req: Request) {
   return Response.json({
     url: base ? `${base}${relativeUrl}` : relativeUrl,
     mediaType: meta.mediaType,
-    // Meta's servers must be able to fetch this URL over the public
-    // internet to attach it to a message — a relative/localhost URL only
-    // works for previewing inside this app, not for a real WhatsApp send.
+    // Meta must be able to fetch this URL publicly; a relative/localhost URL only works for in-app preview, not a real send.
     isPubliclyReachable: Boolean(base),
   });
 }

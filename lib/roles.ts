@@ -1,16 +1,9 @@
 import { prisma } from "./db";
 import { defaultMemberPermissions } from "./permissions";
 
-// The three roles every tenant is built around — session.role === "OWNER"
-// checks throughout the app depend on a role with exactly this name
-// existing, so these are seeded for every new tenant and can never be
-// renamed or deleted (see Role.isSystem in schema.prisma). OWNER and
-// CO_OWNER are permission-check-exempt (full access always — see
-// lib/permissions.ts); MEMBER gets a real, editable set of permissions.
+// session.role === "OWNER" checks depend on a role with exactly this name existing, so these can never be renamed/deleted (see Role.isSystem in schema.prisma).
 export const SYSTEM_ROLE_NAMES = ["OWNER", "CO_OWNER", "MEMBER"] as const;
 
-// Creates the three system roles for a brand new tenant and returns them
-// keyed by name for convenient lookup (e.g. roles.OWNER.id).
 export async function createSystemRoles(tenantId: string) {
   const roles = await Promise.all(
     SYSTEM_ROLE_NAMES.map((name) =>

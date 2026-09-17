@@ -1,11 +1,7 @@
 import { prisma } from "@/lib/db";
 import { redisConnection } from "@/lib/redis";
 
-// Deliberately public — no requireSession(). An uptime monitor or a
-// quick manual check after a deploy needs to hit this without a login,
-// and it never returns anything sensitive (no stack traces, no
-// internal hostnames) — just whether the app's two real dependencies
-// are reachable.
+// Deliberately public (no requireSession()) for uptime monitors — returns only up/down status, never stack traces or hostnames.
 export const dynamic = "force-dynamic";
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

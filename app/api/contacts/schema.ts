@@ -14,8 +14,7 @@ export const LeadInputSchema = z.object({
 
 export type LeadInput = z.infer<typeof LeadInputSchema>;
 
-// Guards against attaching another tenant's tag id to a lead — every tagId
-// must resolve to a Tag owned by this tenant, or the whole request is rejected.
+// Rejects the whole request if any tagId doesn't resolve to a Tag owned by this tenant.
 export async function assertTagsBelongToTenant(
   tenantId: string,
   tagIds: string[]

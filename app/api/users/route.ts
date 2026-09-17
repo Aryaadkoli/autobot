@@ -6,9 +6,7 @@ import { getOrCreateAccountForInvite } from "@/lib/accounts";
 import { sendAccountEmail } from "@/lib/mailer";
 import { requirePermission } from "@/lib/permissions";
 
-// OWNER is intentionally not offered here — it's meant to be the single
-// business owner account created at seed/signup time, not something
-// granted through the team-management UI.
+// OWNER is intentionally not offered here — granted only at seed/signup time, never via team-management.
 const UserInputSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
   email: z.string().trim().toLowerCase().email("Invalid email address"),
@@ -63,10 +61,7 @@ export async function POST(req: Request) {
   if (!role || role.name === "OWNER") {
     return Response.json({ error: "Invalid role" }, { status: 400 });
   }
-  // Only a true OWNER can hand out CO_OWNER — a CO_OWNER granting
-  // someone else co-ownership would be able to bootstrap its way to
-  // unrestricted control, defeating the one safety rail CO_OWNER has
-  // (see DELETE below).
+  // Only OWNER can grant CO_OWNER — otherwise a CO_OWNER could bootstrap its way to unrestricted control.
   if (role.name === "CO_OWNER" && session.role !== "OWNER") {
     return Response.json({ error: "Only the owner can add a co-owner" }, { status: 403 });
   }
@@ -83,12 +78,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // The (tenantId, accountId) constraint is a real, unconditional unique
-  // index (see schema.prisma) — if this email was ever removed from
-  // this tenant before, its User row still physically exists, just
-  // soft-deleted, and a plain .create() would hit that constraint. Look
-  // for it via the unfiltered client and resurrect it instead of trying
-  // to insert a duplicate.
+  // (tenantId, accountId) is a plain unique index, so a previously-removed (soft-deleted) row would collide with .create() — resurrect it instead.
   const priorMembership = await prismaIncludingDeleted.user.findFirst({
     where: { tenantId: session.tenantId, accountId: account.id },
   });

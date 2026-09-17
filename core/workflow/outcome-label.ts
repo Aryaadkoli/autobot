@@ -1,8 +1,4 @@
-// Turns a workflow's raw JSON outcome string ("no_response") into
-// something readable ("No response") for wherever a finished
-// SequenceInstance needs to show what happened — Analytics' workflow
-// breakdown and the Lead detail page both need this, so it lives here
-// once instead of twice.
+// Turns a raw outcome string ("no_response") into a readable label ("No response") — shared by Analytics and the Lead detail page instead of duplicated.
 export function outcomeLabelFromDefinition(
   definition: unknown,
   stepId: string | null
