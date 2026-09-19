@@ -37,10 +37,21 @@ export default async function DashboardLayout({
     redirect("/select-tenant");
   }
 
-  const tenant = await prisma.tenant.findUniqueOrThrow({
+  // findUnique, not findUniqueOrThrow: a signed-in browser's session cookie
+  // caches this tenantId, so a dev database reset (or any tenant deletion)
+  // leaves a stale, no-longer-existent id sitting in someone's cookie —
+  // that must never crash the whole layout. Route through a Route Handler
+  // to clear it (see clear-stale-session/route.ts) — signOut() itself can
+  // only run in a Server Action or Route Handler, never during a Server
+  // Component's render, so it can't be called directly here.
+  const tenant = await prisma.tenant.findUnique({
     where: { id: account.tenantId },
     select: { name: true },
   });
+
+  if (!tenant) {
+    redirect("/api/auth/clear-stale-session");
+  }
 
   async function logout() {
     "use server";
