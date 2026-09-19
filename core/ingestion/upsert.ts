@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { normalizePhone } from "@/lib/phone";
 import { evaluateCondition, type ConditionNode } from "../tagging/rules";
 import { mapRow, type ColumnMapping } from "./mapper";
+import { loadTenantLeadStageTaxonomy, resolveCustomerStatusAndStage } from "@/lib/lead-stages";
 
 export type ImportRowError = { row: number; error: string };
 
@@ -29,6 +30,7 @@ export async function importContacts({
   tagName?: string;
 }): Promise<ImportResult> {
   const businessTypeCache = new Map<string, string>();
+  const leadStageTaxonomy = await loadTenantLeadStageTaxonomy(tenantId);
   const errorReport: ImportRowError[] = [];
   const taggedCounts: Record<string, number> = {};
   const contactIds = new Set<string>();
@@ -76,9 +78,26 @@ export async function importContacts({
         where: { tenantId_phone: { tenantId, phone } },
       });
 
+      // Names that don't resolve against the tenant's taxonomy (typo,
+      // stale export, etc.) are kept as plain attributes instead of being
+      // silently dropped — a bad status/stage name must never fail the row.
+      const { customerStatusId, leadStageId } = resolveCustomerStatusAndStage(
+        leadStageTaxonomy,
+        mapped.customerStatus,
+        mapped.leadStage
+      );
+      const unresolvedTaxonomyAttributes: Record<string, unknown> = {};
+      if (mapped.customerStatus && !customerStatusId) {
+        unresolvedTaxonomyAttributes.customerStatus = mapped.customerStatus;
+      }
+      if (mapped.leadStage && !leadStageId) {
+        unresolvedTaxonomyAttributes.leadStage = mapped.leadStage;
+      }
+
       const mergedAttributes = {
         ...((existing?.attributes as Record<string, unknown>) ?? {}),
         ...mapped.attributes,
+        ...unresolvedTaxonomyAttributes,
       };
 
       // Re-importing a phone number belonging to a previously-deleted contact hits the `update` branch on that row — clearing deletedAt here resurrects it deliberately.
@@ -87,6 +106,8 @@ export async function importContacts({
         update: {
           ...(mapped.name ? { name: mapped.name } : {}),
           ...(businessTypeId ? { businessTypeId } : {}),
+          ...(customerStatusId ? { customerStatusId } : {}),
+          ...(leadStageId ? { leadStageId } : {}),
           attributes: mergedAttributes as Prisma.InputJsonValue,
           deletedAt: null,
         },
@@ -95,6 +116,8 @@ export async function importContacts({
           phone,
           name: mapped.name,
           businessTypeId,
+          customerStatusId,
+          leadStageId,
           attributes: mergedAttributes as Prisma.InputJsonValue,
         },
       });

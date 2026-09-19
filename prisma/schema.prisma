@@ -14,41 +14,43 @@ datasource db {
 // ─────────────────────────────────────────────
 
 model Tenant {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique // used in URLs, e.g. app.autobot.in/t/alpha-corp
-  timezone  String   @default("Asia/Kolkata")
-  plan      Plan     @default(FREE)
+  id       String @id @default(cuid())
+  name     String
+  slug     String @unique // used in URLs, e.g. app.autobot.in/t/alpha-corp
+  timezone String @default("Asia/Kolkata")
+  plan     Plan   @default(FREE)
 
   // Channel credentials (encrypt access tokens at rest with libsodium/secretbox)
-  waPhoneNumberId   String? // Meta Cloud API phone number ID
-  waBusinessAcctId  String? // WABA ID
-  waAccessTokenEnc  String? // encrypted
-  brevoApiKeyEnc    String? // encrypted
+  waPhoneNumberId  String? // Meta Cloud API phone number ID
+  waBusinessAcctId String? // WABA ID
+  waAccessTokenEnc String? // encrypted
+  brevoApiKeyEnc   String? // encrypted
 
   // Platform-wide guardrails
-  dailyCapPerContact Int @default(3)   // frequency cap: max messages/contact/24h
-  quietHoursStart    Int @default(21)  // no sends after 21:00 local
-  quietHoursEnd      Int @default(9)   // no sends before 09:00 local
+  dailyCapPerContact Int @default(3) // frequency cap: max messages/contact/24h
+  quietHoursStart    Int @default(21) // no sends after 21:00 local
+  quietHoursEnd      Int @default(9) // no sends before 09:00 local
 
   createdAt DateTime @default(now())
 
-  users         User[]
-  roles         Role[]
-  businessTypes BusinessType[]
-  services      Service[]
-  contacts      Contact[]
-  tags          Tag[]
-  tagRules      TagRule[]
-  imports       Import[]
-  events        Event[]
-  workflows     Workflow[]
-  instances     SequenceInstance[]
-  templates     MessageTemplate[]
-  messages      Message[]
-  links         Link[]
-  apiKeys       ApiKey[]
-  campaigns     Campaign[]
+  users              User[]
+  roles              Role[]
+  businessTypes      BusinessType[]
+  services           Service[]
+  contacts           Contact[]
+  tags               Tag[]
+  tagRules           TagRule[]
+  customerStatuses   CustomerStatus[]
+  leadStages         LeadStage[]
+  imports            Import[]
+  events             Event[]
+  workflows          Workflow[]
+  instances          SequenceInstance[]
+  templates          MessageTemplate[]
+  messages           Message[]
+  links              Link[]
+  apiKeys            ApiKey[]
+  campaigns          Campaign[]
   scheduledCampaigns ScheduledCampaign[]
 }
 
@@ -87,7 +89,7 @@ model User {
   role      Role      @relation(fields: [roleId], references: [id])
   createdAt DateTime  @default(now())
   deletedAt DateTime? // set instead of a hard delete when a teammate is
-                       // removed — see lib/db.ts's soft-delete extension.
+  // removed — see lib/db.ts's soft-delete extension.
 
   // A removed teammate is soft-deleted (deletedAt set), and this
   // constraint stays a genuine, unconditional unique index — Postgres
@@ -109,23 +111,23 @@ model User {
 // permission. MEMBER and any custom role the owner creates are governed
 // entirely by their RolePermission rows.
 model Role {
-  id        String    @id @default(cuid())
-  tenantId  String
-  tenant    Tenant    @relation(fields: [tenantId], references: [id])
-  name      String    // "OWNER" / "CO_OWNER" / "MEMBER" or a custom name
-  isSystem  Boolean   @default(false)
-  deletedAt DateTime? // set instead of a hard delete when the role is
-                       // still assigned to someone at delete time; a
-                       // soft-deleted role keeps working for whoever
-                       // already has it, it just stops being offered
-                       // when assigning a role to someone new. Because
-                       // this is a genuine unique constraint (not
-                       // partial — see the User model's comment above),
-                       // recreating a role with the same name as a
-                       // soft-deleted one resurrects it instead of
-                       // making a second row — see app/api/roles/route.ts.
-  createdAt DateTime  @default(now())
-  users     User[]
+  id          String           @id @default(cuid())
+  tenantId    String
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+  name        String // "OWNER" / "CO_OWNER" / "MEMBER" or a custom name
+  isSystem    Boolean          @default(false)
+  deletedAt   DateTime? // set instead of a hard delete when the role is
+  // still assigned to someone at delete time; a
+  // soft-deleted role keeps working for whoever
+  // already has it, it just stops being offered
+  // when assigning a role to someone new. Because
+  // this is a genuine unique constraint (not
+  // partial — see the User model's comment above),
+  // recreating a role with the same name as a
+  // soft-deleted one resurrects it instead of
+  // making a second row — see app/api/roles/route.ts.
+  createdAt   DateTime         @default(now())
+  users       User[]
   permissions RolePermission[]
 
   @@unique([tenantId, name])
@@ -149,14 +151,14 @@ model RolePermission {
 }
 
 enum Module {
-  LEADS      // Contacts, tags, tag rules, imports
+  LEADS // Contacts, tags, tag rules, imports
   TEMPLATES
-  CAMPAIGNS  // Campaigns + scheduled campaigns
+  CAMPAIGNS // Campaigns + scheduled campaigns
   WORKFLOWS
   ANALYTICS
-  TEAM       // Team members + roles (view/edit here does NOT let a non-owner
-             // touch an OWNER/CO_OWNER account — see lib/permissions.ts)
-  SETTINGS   // WhatsApp connection, sending limits
+  TEAM // Team members + roles (view/edit here does NOT let a non-owner
+  // touch an OWNER/CO_OWNER account — see lib/permissions.ts)
+  SETTINGS // WhatsApp connection, sending limits
 }
 
 // ─────────────────────────────────────────────
@@ -167,7 +169,7 @@ model BusinessType {
   id       String    @id @default(cuid())
   tenantId String
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
-  name     String    // e.g. "Distribution", "Retail"
+  name     String // e.g. "Distribution", "Retail"
   services Service[]
   contacts Contact[]
 
@@ -180,9 +182,9 @@ model Service {
   tenant         Tenant       @relation(fields: [tenantId], references: [id])
   businessTypeId String
   businessType   BusinessType @relation(fields: [businessTypeId], references: [id])
-  name           String       // e.g. "New product leads"
+  name           String // e.g. "New product leads"
   type           ServiceType
-  priority       Int          // LOWER number = HIGHER priority. PAYMENT=10, LEAD=50...
+  priority       Int // LOWER number = HIGHER priority. PAYMENT=10, LEAD=50...
   workflows      Workflow[]
 
   @@unique([tenantId, name])
@@ -204,11 +206,25 @@ model Contact {
   id             String        @id @default(cuid())
   tenantId       String
   tenant         Tenant        @relation(fields: [tenantId], references: [id])
-  phone          String        // E.164, e.g. +919812345678 — primary identity in India
+  phone          String // E.164, e.g. +919812345678 — primary identity in India
   email          String?
   name           String?
   businessTypeId String?
   businessType   BusinessType? @relation(fields: [businessTypeId], references: [id])
+
+  // Customer Status = which lifecycle track a contact is on (Acquisition/
+  // Retention/Upsell/Cross-Sell); Lead Stage = the specific step within
+  // that track. Both are per-tenant taxonomies (see CustomerStatus/
+  // LeadStage below), seeded automatically for every tenant — a
+  // leadStage always belongs to its customerStatus, enforced in
+  // lib/lead-stages.ts's resolveCustomerStatusAndStage, not at the DB
+  // level. Distinct from the older, unrelated attributes.stage badge
+  // used on the Leads page (see lib/stages... / CLAUDE.md) — that one
+  // stays as-is.
+  customerStatusId String?
+  customerStatus   CustomerStatus? @relation(fields: [customerStatusId], references: [id])
+  leadStageId      String?
+  leadStage        LeadStage?      @relation(fields: [leadStageId], references: [id])
 
   // Free-form business data from Excel/ERP: {"city":"Pune","last_order_date":"2026-06-01","credit_days":30}
   attributes Json @default("{}")
@@ -217,10 +233,10 @@ model Contact {
   waOptedOut    Boolean @default(false)
   emailOptedOut Boolean @default(false)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime? // set instead of a hard delete — see lib/db.ts's
-                       // soft-delete extension.
+  // soft-delete extension.
 
   tags      ContactTag[]
   events    Event[]
@@ -233,17 +249,58 @@ model Contact {
   // resurrects it on a matching re-import instead of erroring.
   @@unique([tenantId, phone])
   @@index([tenantId, businessTypeId])
+  @@index([tenantId, customerStatusId])
+  @@index([tenantId, leadStageId])
+}
+
+// A lifecycle track — "Customer Acquisition Stages", "Customer Retention
+// Status", "Upsell Statuses", "Cross-Sell Statuses" by default. Seeded once
+// per tenant at creation time (lib/lead-stages.ts's ensureDefaultLeadStages,
+// called from lib/accounts.ts and both seed scripts) — not user-editable
+// in this cut, hence isSystem defaulting true throughout.
+model CustomerStatus {
+  id         String      @id @default(cuid())
+  tenantId   String
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  name       String
+  order      Int         @default(0)
+  isSystem   Boolean     @default(true)
+  deletedAt  DateTime?
+  leadStages LeadStage[]
+  contacts   Contact[]
+
+  @@unique([tenantId, name])
+}
+
+// One step within a CustomerStatus track, e.g. "Lead"/"Demo Pitch"/
+// "Closed-Won". The same stage name can appear under more than one
+// CustomerStatus (e.g. "Negotiation" is both an Upsell and a Cross-Sell
+// stage) — uniqueness is scoped to the parent status, not the tenant.
+model LeadStage {
+  id               String         @id @default(cuid())
+  tenantId         String
+  tenant           Tenant         @relation(fields: [tenantId], references: [id])
+  customerStatusId String
+  customerStatus   CustomerStatus @relation(fields: [customerStatusId], references: [id])
+  name             String
+  order            Int            @default(0)
+  isSystem         Boolean        @default(true)
+  deletedAt        DateTime?
+  contacts         Contact[]
+
+  @@unique([tenantId, customerStatusId, name])
+  @@index([tenantId, customerStatusId])
 }
 
 model Tag {
-  id       String       @id @default(cuid())
-  tenantId String
-  tenant   Tenant       @relation(fields: [tenantId], references: [id])
-  name     String       // "dormant-30d", "high-value", "interested-productX"
-  deletedAt DateTime?    // set instead of a hard delete — see lib/db.ts's
-                          // soft-delete extension.
-  contacts ContactTag[]
-  rules    TagRule[]
+  id                 String              @id @default(cuid())
+  tenantId           String
+  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  name               String // "dormant-30d", "high-value", "interested-productX"
+  deletedAt          DateTime? // set instead of a hard delete — see lib/db.ts's
+  // soft-delete extension.
+  contacts           ContactTag[]
+  rules              TagRule[]
   scheduledCampaigns ScheduledCampaign[]
 
   // Genuine unique constraint (see the User model's comment above for
@@ -264,22 +321,22 @@ model ContactTag {
 
 // The Categorization Script from the spec — rules stored as data, editable in UI later
 model TagRule {
-  id       String     @id @default(cuid())
-  tenantId String
-  tenant   Tenant     @relation(fields: [tenantId], references: [id])
-  name     String     // "Mark dormant after 30 days"
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  name      String // "Mark dormant after 30 days"
   // Condition tree, e.g.:
   // {"all":[{"attr":"last_order_date","op":"olderThanDays","value":30},
   //         {"attr":"city","op":"eq","value":"Pune"}]}
   condition Json
   tagId     String
-  tag       Tag        @relation(fields: [tagId], references: [id])
-  runOn     RuleRunOn  @default(BOTH)
-  active    Boolean    @default(true)
+  tag       Tag       @relation(fields: [tagId], references: [id])
+  runOn     RuleRunOn @default(BOTH)
+  active    Boolean   @default(true)
 }
 
 enum RuleRunOn {
-  INGEST   // evaluate when a contact is imported/updated
+  INGEST // evaluate when a contact is imported/updated
   SCHEDULE // evaluate in the nightly sweep (for time-based conditions)
   BOTH
 }
@@ -299,7 +356,7 @@ model Import {
   totalRows     Int          @default(0)
   importedRows  Int          @default(0)
   failedRows    Int          @default(0)
-  errorReport   Json?        // [{row: 14, error: "invalid phone"}]
+  errorReport   Json? // [{row: 14, error: "invalid phone"}]
   createdAt     DateTime     @default(now())
 }
 
@@ -314,7 +371,7 @@ model ApiKey {
   id         String    @id @default(cuid())
   tenantId   String
   tenant     Tenant    @relation(fields: [tenantId], references: [id])
-  name       String    // "ERP webhook key"
+  name       String // "ERP webhook key"
   keyHash    String    @unique // store SHA-256, show plaintext once at creation
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -359,20 +416,20 @@ enum EventType {
 // ─────────────────────────────────────────────
 
 model Workflow {
-  id        String         @id @default(cuid())
-  tenantId  String
-  tenant    Tenant         @relation(fields: [tenantId], references: [id])
-  serviceId String
-  service   Service        @relation(fields: [serviceId], references: [id])
-  name      String
-  version   Int            @default(1)
-  isSubflow Boolean        @default(false) // sub-flows are pivot targets, not entered directly
-  status    WorkflowStatus @default(DRAFT)
+  id         String         @id @default(cuid())
+  tenantId   String
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
+  serviceId  String
+  service    Service        @relation(fields: [serviceId], references: [id])
+  name       String
+  version    Int            @default(1)
+  isSubflow  Boolean        @default(false) // sub-flows are pivot targets, not entered directly
+  status     WorkflowStatus @default(DRAFT)
   // The playbook — see workflow-format.md for the JSON structure
   definition Json
-  createdAt  DateTime      @default(now())
-  deletedAt  DateTime?     // set instead of a hard delete — see
-                            // lib/db.ts's soft-delete extension.
+  createdAt  DateTime       @default(now())
+  deletedAt  DateTime? // set instead of a hard delete — see
+  // lib/db.ts's soft-delete extension.
 
   instances SequenceInstance[]
 
@@ -400,9 +457,9 @@ model SequenceInstance {
 
   currentStepId String?
   status        InstanceStatus @default(ACTIVE)
-  wakeAt        DateTime?      // when the pending delayed job fires
-  waitingFor    EventType?     // which behavior event would transition this instance
-  bullJobId     String?        // pending BullMQ job — cancel it on pivot
+  wakeAt        DateTime? // when the pending delayed job fires
+  waitingFor    EventType? // which behavior event would transition this instance
+  bullJobId     String? // pending BullMQ job — cancel it on pivot
 
   pivotedToId String? // instance id of the sub-flow this pivoted into
   context     Json    @default("{}") // per-run variables, e.g. {"invoice_no":"INV-201"}
@@ -411,15 +468,15 @@ model SequenceInstance {
   endedAt   DateTime?
 
   @@index([tenantId, contactId, status]) // "does this contact have an active payment flow?"
-  @@index([status, wakeAt])              // worker sweep safety net
+  @@index([status, wakeAt]) // worker sweep safety net
   @@index([tenantId, workflowId, status]) // analytics: conversion per workflow
 }
 
 enum InstanceStatus {
   ACTIVE
-  COMPLETED  // reached an end step — this is a "conversion"
-  PIVOTED    // killed by a CTA, sub-flow started
-  CANCELLED  // manual stop or opt-out
+  COMPLETED // reached an end step — this is a "conversion"
+  PIVOTED // killed by a CTA, sub-flow started
+  CANCELLED // manual stop or opt-out
   SUPPRESSED // gatekeeper blocked it permanently (e.g. opted out mid-flow)
 }
 
@@ -431,7 +488,7 @@ model MessageTemplate {
   id       String  @id @default(cuid())
   tenantId String
   tenant   Tenant  @relation(fields: [tenantId], references: [id])
-  name     String  // internal name used in workflow JSON: "payment_reminder_1"
+  name     String // internal name used in workflow JSON: "payment_reminder_1"
   channel  Channel
 
   // WhatsApp: Meta template name + category (drives cost: UTILITY ≈ ₹0.115 vs MARKETING ≈ ₹0.86)
@@ -444,14 +501,14 @@ model MessageTemplate {
   mediaType MediaType?
 
   body           String // with {{1}}, {{2}} placeholders (or {{name}} for email)
-  variables      Json   @default("[]") // [{"pos":1,"source":"contact.name"},{"pos":2,"source":"context.invoice_no"}]
+  variables      Json             @default("[]") // [{"pos":1,"source":"contact.name"},{"pos":2,"source":"context.invoice_no"}]
   approvalStatus TemplateApproval @default(PENDING)
-  createdAt      DateTime @default(now())
+  createdAt      DateTime         @default(now())
   deletedAt      DateTime? // set instead of a hard delete — see
-                            // lib/db.ts's soft-delete extension.
+  // lib/db.ts's soft-delete extension.
 
-  messages  Message[]
-  campaigns Campaign[]
+  messages           Message[]
+  campaigns          Campaign[]
   scheduledCampaigns ScheduledCampaign[]
 
   // Genuine unique constraint (see the User model's comment above) — a
@@ -465,20 +522,20 @@ model MessageTemplate {
 // no recurrence, no behavior triggers, just "at time X, run this campaign."
 // Picked up by the in-process scheduler in instrumentation.ts.
 model ScheduledCampaign {
-  id         String   @id @default(cuid())
+  id         String          @id @default(cuid())
   tenantId   String
-  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  tenant     Tenant          @relation(fields: [tenantId], references: [id])
   templateId String
   template   MessageTemplate @relation(fields: [templateId], references: [id])
-  name       String   // e.g. "Mango farmers — January reminder"
+  name       String // e.g. "Mango farmers — January reminder"
 
   tagId String?
   tag   Tag?    @relation(fields: [tagId], references: [id])
   stage String?
 
-  scheduledFor DateTime
-  recurrence   ScheduledCampaignRecurrence @default(NONE)
-  status       ScheduledCampaignStatus @default(PENDING)
+  scheduledFor  DateTime
+  recurrence    ScheduledCampaignRecurrence @default(NONE)
+  status        ScheduledCampaignStatus     @default(PENDING)
   ranCampaignId String? // points to the Campaign history row once it runs
   errorMessage  String?
 
@@ -508,7 +565,7 @@ model Campaign {
   tenant     Tenant           @relation(fields: [tenantId], references: [id])
   templateId String?
   template   MessageTemplate? @relation(fields: [templateId], references: [id])
-  source     String           // e.g. "Tag: High-Value Customer", "Uploaded list: leads.xlsx"
+  source     String // e.g. "Tag: High-Value Customer", "Uploaded list: leads.xlsx"
 
   targetedCount Int
   sentCount     Int
@@ -548,7 +605,7 @@ model Message {
   tenant     Tenant           @relation(fields: [tenantId], references: [id])
   contactId  String
   contact    Contact          @relation(fields: [contactId], references: [id])
-  instanceId String?          // null for one-off/manual sends
+  instanceId String? // null for one-off/manual sends
   stepId     String?
   templateId String?
   template   MessageTemplate? @relation(fields: [templateId], references: [id])
@@ -558,11 +615,11 @@ model Message {
   // Worker refuses to send if this key already exists → no double sends, ever.
   dedupeKey String @unique
 
-  providerMessageId String?       // Meta wamid / provider request id — webhook lookups
+  providerMessageId String? // Meta wamid / provider request id — webhook lookups
   status            MessageStatus @default(QUEUED)
   error             String?
-  costPaise         Int?          // track spend: 12 = ₹0.115 utility, 86 = marketing
-  renderedBody      String?       // what was actually sent, for the conversation view
+  costPaise         Int? // track spend: 12 = ₹0.115 utility, 86 = marketing
+  renderedBody      String? // what was actually sent, for the conversation view
 
   sentAt          DateTime?
   statusUpdatedAt DateTime  @default(now())
@@ -571,8 +628,8 @@ model Message {
   links Link[]
 
   @@index([tenantId, contactId, sentAt]) // frequency-cap query
-  @@index([providerMessageId])           // status webhook lookup
-  @@index([tenantId, createdAt])         // analytics
+  @@index([providerMessageId]) // status webhook lookup
+  @@index([tenantId, createdAt]) // analytics
 }
 
 enum MessageStatus {

@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "./db";
 import { sendAccountEmail } from "./mailer";
 import { createSystemRoles } from "./roles";
+import { ensureDefaultLeadStages } from "./lead-stages";
 
 // Signup claims to know this email's password (new or an existing owner's) — verified below; invite (further down) can't prove that, so it reuses the Account as-is instead.
 export async function getOrCreateAccountForSignup(email: string, name: string, password: string) {
@@ -44,6 +45,7 @@ async function createTenantWithOwner(accountId: string, businessName: string) {
 
   const tenant = await prisma.tenant.create({ data: { name: businessName, slug } });
   const roles = await createSystemRoles(tenant.id);
+  await ensureDefaultLeadStages(tenant.id);
   await prisma.user.create({
     data: { tenantId: tenant.id, accountId, roleId: roles.OWNER.id },
   });

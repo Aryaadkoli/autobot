@@ -12,6 +12,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db";
 import { SYSTEM_ROLE_NAMES } from "../lib/roles";
 import { defaultMemberPermissions } from "../lib/permissions";
+import { ensureDefaultLeadStages } from "../lib/lead-stages";
 
 const OWNER_EMAIL = "aryaadkoli@gmail.com";
 const OWNER_NAME = "Arya Adkoli";
@@ -71,6 +72,12 @@ async function main() {
     update: { roleId: ownerRole.id },
     create: { tenantId: tenant.id, accountId: account.id, roleId: ownerRole.id },
   });
+
+  // Customer Status / Lead Stage taxonomy (Acquisition/Retention/Upsell/
+  // Cross-Sell) — same fixed set every tenant gets, so bulk imports that
+  // map a "Customer Status"/"Lead Stage" column have something real to
+  // resolve against from day one. See lib/lead-stages.ts.
+  await ensureDefaultLeadStages(tenant.id);
 
   // The one piece of non-demo scaffolding this seed creates: Workflows
   // can't be created at all without at least one Service to attach to

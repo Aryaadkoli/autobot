@@ -43,6 +43,8 @@ export default function ColumnMappingTable({
                     <option value="phone">Phone</option>
                     <option value="name">Name</option>
                     <option value="businessType">Business type</option>
+                    <option value="customerStatus">Customer status</option>
+                    <option value="leadStage">Lead stage</option>
                     <option value={attrValue}>
                       Attribute: {slugifyHeader(header)}
                     </option>

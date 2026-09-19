@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db";
 import type { EventType } from "@prisma/client";
 import { SYSTEM_ROLE_NAMES } from "../lib/roles";
+import { ensureDefaultLeadStages } from "../lib/lead-stages";
 
 function daysAgo(days: number, hours = 0) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000 - hours * 60 * 60 * 1000);
@@ -89,6 +90,8 @@ async function main() {
 
   await ensureSystemRoles(tenant.id);
   await ensureSystemRoles(energyTenant.id);
+  await ensureDefaultLeadStages(tenant.id);
+  await ensureDefaultLeadStages(energyTenant.id);
 
   const seedPassword = process.env.SEED_ADMIN_PASSWORD ?? "changeme123";
 
