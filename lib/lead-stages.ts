@@ -120,3 +120,31 @@ export function resolveCustomerStatusAndStage(
 
   return { customerStatusId: status?.id ?? null, leadStageId: stage?.id ?? null };
 }
+
+// For a manual create/edit, where the UI's cascading dropdown should
+// already only ever submit a valid pair — unlike bulk import, a mismatch
+// here means something's wrong (a stale form, a tampered request), so this
+// rejects rather than silently auto-correcting. Returns an error message,
+// or null if the pair is valid (or absent).
+export async function validateCustomerStatusAndStageIds(
+  tenantId: string,
+  customerStatusId: string | null,
+  leadStageId: string | null
+): Promise<string | null> {
+  if (customerStatusId) {
+    const status = await prisma.customerStatus.findFirst({
+      where: { id: customerStatusId, tenantId, deletedAt: null },
+    });
+    if (!status) return "Invalid customer status";
+  }
+  if (leadStageId) {
+    const stage = await prisma.leadStage.findFirst({
+      where: { id: leadStageId, tenantId, deletedAt: null },
+    });
+    if (!stage) return "Invalid lead stage";
+    if (customerStatusId && stage.customerStatusId !== customerStatusId) {
+      return "This lead stage doesn't belong to the selected customer status";
+    }
+  }
+  return null;
+}

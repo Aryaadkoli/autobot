@@ -12,6 +12,8 @@ type Detail = {
     name: string | null;
     phone: string;
     businessType: string | null;
+    customerStatus: { id: string; name: string } | null;
+    leadStage: { id: string; name: string } | null;
     attributes: unknown;
     tags: { id: string; name: string }[];
   };
@@ -92,6 +94,18 @@ export default function LeadDetailModal({
               <div className="text-stone-500">Business type</div>
               <div className="text-stone-900 mt-0.5">
                 {data.contact.businessType ?? "—"}
+              </div>
+            </div>
+            <div>
+              <div className="text-stone-500">Customer status</div>
+              <div className="text-stone-900 mt-0.5">
+                {data.contact.customerStatus?.name ?? "—"}
+              </div>
+            </div>
+            <div>
+              <div className="text-stone-500">Lead stage</div>
+              <div className="text-stone-900 mt-0.5">
+                {data.contact.leadStage?.name ?? "—"}
               </div>
             </div>
             {details.map(([key, value]) => (

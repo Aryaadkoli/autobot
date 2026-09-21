@@ -3,6 +3,7 @@ import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
 import { normalizePhone } from "@/lib/phone";
 import { requirePermission } from "@/lib/permissions";
+import { validateCustomerStatusAndStageIds } from "@/lib/lead-stages";
 import { outcomeLabelFromDefinition } from "@/core/workflow/outcome-label";
 import { LeadInputSchema, assertTagsBelongToTenant } from "../schema";
 
@@ -22,7 +23,12 @@ export async function GET(
 
   const contact = await prisma.contact.findFirst({
     where: { id, tenantId: session.tenantId },
-    include: { businessType: true, tags: { include: { tag: true } } },
+    include: {
+      businessType: true,
+      customerStatus: true,
+      leadStage: true,
+      tags: { include: { tag: true } },
+    },
   });
   if (!contact) {
     return Response.json({ error: "Lead not found" }, { status: 404 });
@@ -48,6 +54,12 @@ export async function GET(
       name: contact.name,
       phone: contact.phone,
       businessType: contact.businessType?.name ?? null,
+      customerStatus: contact.customerStatus
+        ? { id: contact.customerStatus.id, name: contact.customerStatus.name }
+        : null,
+      leadStage: contact.leadStage
+        ? { id: contact.leadStage.id, name: contact.leadStage.name }
+        : null,
       attributes: contact.attributes,
       tags: contact.tags.map((t) => ({ id: t.tag.id, name: t.tag.name })),
     },
@@ -95,7 +107,7 @@ export async function PATCH(
       { status: 400 }
     );
   }
-  const { name, phone: rawPhone, businessType, city, stage, tagIds } =
+  const { name, phone: rawPhone, businessType, city, stage, customerStatusId, leadStageId, tagIds } =
     parsed.data;
 
   const phone = normalizePhone(rawPhone);
@@ -105,6 +117,9 @@ export async function PATCH(
 
   const tagError = await assertTagsBelongToTenant(tenantId, tagIds);
   if (tagError) return Response.json({ error: tagError }, { status: 400 });
+
+  const taxonomyError = await validateCustomerStatusAndStageIds(tenantId, customerStatusId, leadStageId);
+  if (taxonomyError) return Response.json({ error: taxonomyError }, { status: 400 });
 
   if (phone !== existing.phone) {
     // Only a live clash is reported here — a soft-deleted match isn't resurrected on edit like it is on create (contacts/route.ts); it falls through to the same constraint error on update below.
@@ -144,6 +159,8 @@ export async function PATCH(
       data: {
         name: name && name.length > 0 ? name : null,
         businessTypeId,
+        customerStatusId,
+        leadStageId,
         attributes: mergedAttributes as Prisma.InputJsonValue,
       },
     });

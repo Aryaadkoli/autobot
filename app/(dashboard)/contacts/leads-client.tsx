@@ -18,11 +18,15 @@ export type LeadRow = {
   businessType: string | null;
   city: string | null;
   stage: string;
+  customerStatus: { id: string; name: string } | null;
+  leadStage: { id: string; name: string } | null;
   tags: { id: string; name: string }[];
 };
 
 type Tag = { id: string; name: string };
 type BusinessType = { id: string; name: string };
+type CustomerStatus = { id: string; name: string };
+type LeadStageOption = { id: string; name: string; customerStatusId: string };
 
 type ModalState =
   | { type: "add" }
@@ -36,6 +40,8 @@ export default function LeadsClient({
   leads,
   allTags,
   businessTypes,
+  customerStatuses,
+  leadStages,
   activeStage,
   totalLeads,
   newLeadsCount,
@@ -45,6 +51,8 @@ export default function LeadsClient({
   leads: LeadRow[];
   allTags: Tag[];
   businessTypes: BusinessType[];
+  customerStatuses: CustomerStatus[];
+  leadStages: LeadStageOption[];
   activeStage?: string;
   totalLeads: number;
   newLeadsCount: number;
@@ -110,6 +118,8 @@ export default function LeadsClient({
       businessType: lead.businessType ?? "",
       city: lead.city ?? "",
       stage: lead.stage,
+      customerStatusId: lead.customerStatus?.id ?? null,
+      leadStageId: lead.leadStage?.id ?? null,
       tagIds: lead.tags.map((t) => t.id),
     };
   }
@@ -219,6 +229,8 @@ export default function LeadsClient({
                 <th className="px-4 py-3 font-medium">Phone</th>
                 <th className="px-4 py-3 font-medium">Business type</th>
                 <th className="px-4 py-3 font-medium">Stage</th>
+                <th className="px-4 py-3 font-medium">Customer status</th>
+                <th className="px-4 py-3 font-medium">Lead stage</th>
                 <th className="px-4 py-3 font-medium">Tags</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
@@ -240,6 +252,12 @@ export default function LeadsClient({
                   </td>
                   <td className="px-4 py-3">
                     <StageBadge stage={lead.stage} />
+                  </td>
+                  <td className="px-4 py-3 text-stone-600">
+                    {lead.customerStatus?.name ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-stone-600">
+                    {lead.leadStage?.name ?? "—"}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
@@ -280,6 +298,8 @@ export default function LeadsClient({
       {modal?.type === "add" && (
         <LeadModal
           businessTypes={businessTypes}
+          customerStatuses={customerStatuses}
+          leadStages={leadStages}
           allTags={allTags}
           onClose={() => setModal(null)}
           onSaved={closeAndRefresh}
@@ -290,6 +310,8 @@ export default function LeadsClient({
         <LeadModal
           lead={toEditable(modal.lead)}
           businessTypes={businessTypes}
+          customerStatuses={customerStatuses}
+          leadStages={leadStages}
           allTags={allTags}
           onClose={() => setModal(null)}
           onSaved={closeAndRefresh}

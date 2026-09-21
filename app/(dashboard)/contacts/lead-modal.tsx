@@ -11,18 +11,27 @@ export type EditableLead = {
   businessType: string;
   city: string;
   stage: string;
+  customerStatusId: string | null;
+  leadStageId: string | null;
   tagIds: string[];
 };
+
+type CustomerStatus = { id: string; name: string };
+type LeadStageOption = { id: string; name: string; customerStatusId: string };
 
 export default function LeadModal({
   lead,
   businessTypes,
+  customerStatuses,
+  leadStages,
   allTags,
   onClose,
   onSaved,
 }: {
   lead?: EditableLead;
   businessTypes: { id: string; name: string }[];
+  customerStatuses: CustomerStatus[];
+  leadStages: LeadStageOption[];
   allTags: { id: string; name: string }[];
   onClose: () => void;
   onSaved: () => void;
@@ -33,9 +42,32 @@ export default function LeadModal({
   const [businessType, setBusinessType] = useState(lead?.businessType ?? "");
   const [city, setCity] = useState(lead?.city ?? "");
   const [stage, setStage] = useState(lead?.stage ?? "new");
+  const [customerStatusId, setCustomerStatusId] = useState<string | null>(
+    lead?.customerStatusId ?? null
+  );
+  const [leadStageId, setLeadStageId] = useState<string | null>(lead?.leadStageId ?? null);
   const [tagIds, setTagIds] = useState<string[]>(lead?.tagIds ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const stagesForStatus = customerStatusId
+    ? leadStages.filter((s) => s.customerStatusId === customerStatusId)
+    : [];
+
+  // Same rule bulk import follows (lib/lead-stages.ts's
+  // resolveCustomerStatusAndStage): changing the customer status resets
+  // the lead stage to that status's first one, since a stage from the
+  // old status is never valid under the new one.
+  function handleStatusChange(nextId: string) {
+    if (!nextId) {
+      setCustomerStatusId(null);
+      setLeadStageId(null);
+      return;
+    }
+    setCustomerStatusId(nextId);
+    const stages = leadStages.filter((s) => s.customerStatusId === nextId);
+    setLeadStageId(stages[0]?.id ?? null);
+  }
 
   function toggleTag(id: string) {
     setTagIds((ids) =>
@@ -59,6 +91,8 @@ export default function LeadModal({
             businessType: businessType.trim() || undefined,
             city: city.trim() || undefined,
             stage,
+            customerStatusId,
+            leadStageId,
             tagIds,
           }),
         }
@@ -143,6 +177,43 @@ export default function LeadModal({
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm text-stone-700 mb-1">
+              Customer status
+            </label>
+            <select
+              value={customerStatusId ?? ""}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="">— None —</option>
+              {customerStatuses.map((cs) => (
+                <option key={cs.id} value={cs.id}>
+                  {cs.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-stone-700 mb-1">Lead stage</label>
+            <select
+              value={leadStageId ?? ""}
+              onChange={(e) => setLeadStageId(e.target.value || null)}
+              disabled={!customerStatusId}
+              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:bg-stone-50 disabled:text-stone-400"
+            >
+              {!customerStatusId && <option value="">Choose a status first</option>}
+              {stagesForStatus.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {allTags.length > 0 && (

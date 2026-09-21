@@ -3,6 +3,7 @@ import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
 import { normalizePhone } from "@/lib/phone";
 import { requirePermission } from "@/lib/permissions";
+import { validateCustomerStatusAndStageIds } from "@/lib/lead-stages";
 import { LeadInputSchema, assertTagsBelongToTenant } from "./schema";
 
 export async function POST(req: Request) {
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  const { name, phone: rawPhone, businessType, city, stage, tagIds } =
+  const { name, phone: rawPhone, businessType, city, stage, customerStatusId, leadStageId, tagIds } =
     parsed.data;
   const { tenantId } = session;
 
@@ -33,6 +34,9 @@ export async function POST(req: Request) {
 
   const tagError = await assertTagsBelongToTenant(tenantId, tagIds);
   if (tagError) return Response.json({ error: tagError }, { status: 400 });
+
+  const taxonomyError = await validateCustomerStatusAndStageIds(tenantId, customerStatusId, leadStageId);
+  if (taxonomyError) return Response.json({ error: taxonomyError }, { status: 400 });
 
   // (tenantId, phone) stays unique even across soft-deletes, so a soft-deleted match is resurrected here instead of hitting a duplicate-key error.
   const existing = await prisma.contact.findUnique({
@@ -68,6 +72,8 @@ export async function POST(req: Request) {
           data: {
             name: name && name.length > 0 ? name : null,
             businessTypeId,
+            customerStatusId,
+            leadStageId,
             attributes,
             deletedAt: null,
           },
@@ -78,6 +84,8 @@ export async function POST(req: Request) {
             phone,
             name: name && name.length > 0 ? name : null,
             businessTypeId,
+            customerStatusId,
+            leadStageId,
             attributes,
           },
         });

@@ -88,10 +88,10 @@ export async function importContacts({
       );
       const unresolvedTaxonomyAttributes: Record<string, unknown> = {};
       if (mapped.customerStatus && !customerStatusId) {
-        unresolvedTaxonomyAttributes.customerStatus = mapped.customerStatus;
+        unresolvedTaxonomyAttributes.customer_status_unresolved = mapped.customerStatus;
       }
       if (mapped.leadStage && !leadStageId) {
-        unresolvedTaxonomyAttributes.leadStage = mapped.leadStage;
+        unresolvedTaxonomyAttributes.lead_stage_unresolved = mapped.leadStage;
       }
 
       const mergedAttributes = {

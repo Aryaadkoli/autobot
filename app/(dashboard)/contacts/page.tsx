@@ -17,7 +17,7 @@ export default async function ContactsPage({
 
   const activeStage = STAGES.some((s) => s.value === stage) ? stage : undefined;
 
-  const [contacts, tags, businessTypes, totalLeads, newLeadsCount] =
+  const [contacts, tags, businessTypes, customerStatuses, leadStages, totalLeads, newLeadsCount] =
     await Promise.all([
       prisma.contact.findMany({
         where: {
@@ -28,12 +28,27 @@ export default async function ContactsPage({
         },
         orderBy: { createdAt: "desc" },
         take: 200,
-        include: { tags: { include: { tag: true } }, businessType: true },
+        include: {
+          tags: { include: { tag: true } },
+          businessType: true,
+          customerStatus: true,
+          leadStage: true,
+        },
       }),
       prisma.tag.findMany({ where: { tenantId }, orderBy: { name: "asc" } }),
       prisma.businessType.findMany({
         where: { tenantId },
         orderBy: { name: "asc" },
+      }),
+      prisma.customerStatus.findMany({
+        where: { tenantId, deletedAt: null },
+        orderBy: { order: "asc" },
+        select: { id: true, name: true },
+      }),
+      prisma.leadStage.findMany({
+        where: { tenantId, deletedAt: null },
+        orderBy: { order: "asc" },
+        select: { id: true, name: true, customerStatusId: true },
       }),
       prisma.contact.count({ where: { tenantId } }),
       prisma.contact.count({
@@ -50,6 +65,8 @@ export default async function ContactsPage({
       businessType: c.businessType?.name ?? null,
       city: attrs?.city ?? null,
       stage: attrs?.stage ?? "new",
+      customerStatus: c.customerStatus ? { id: c.customerStatus.id, name: c.customerStatus.name } : null,
+      leadStage: c.leadStage ? { id: c.leadStage.id, name: c.leadStage.name } : null,
       tags: c.tags.map((t) => ({ id: t.tag.id, name: t.tag.name })),
     };
   });
@@ -60,6 +77,8 @@ export default async function ContactsPage({
         leads={leads}
         allTags={tags}
         businessTypes={businessTypes}
+        customerStatuses={customerStatuses}
+        leadStages={leadStages}
         activeStage={activeStage}
         totalLeads={totalLeads}
         newLeadsCount={newLeadsCount}

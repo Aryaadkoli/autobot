@@ -9,6 +9,13 @@ export const LeadInputSchema = z.object({
   stage: z
     .enum(["new", "contacted", "interested", "converted", "lost"])
     .default("new"),
+  // Distinct from `stage` above (the older, hardcoded Leads-page badge) —
+  // these are the per-tenant Customer Status / Lead Stage taxonomy from
+  // lib/lead-stages.ts. Always sent by the form (never omitted), null
+  // meaning "not set", so this stays a full replace like the rest of this
+  // schema rather than a partial patch.
+  customerStatusId: z.string().trim().min(1).nullable().default(null),
+  leadStageId: z.string().trim().min(1).nullable().default(null),
   tagIds: z.array(z.string()).max(50).default([]),
 });
 
