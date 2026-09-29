@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import AccountModal from "./account-modal";
+import ThemeSwitch from "@/components/theme-switch";
 
 type NavItem = { href: string; label: string; soon?: boolean; preview?: boolean };
 
@@ -116,6 +117,8 @@ export default function Sidebar({
       </nav>
 
       <div className="border-t border-stone-800 p-3 space-y-2">
+        <ThemeSwitch collapsed={collapsed} />
+
         {collapsed ? (
           <button
             onClick={() => setShowAccount(true)}

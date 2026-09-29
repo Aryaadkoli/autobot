@@ -1,39 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useTheme } from "@/lib/use-theme";
 
-type Theme = "light" | "dark";
-
-function applyTheme(theme: Theme) {
-  document.documentElement.classList.toggle("dark", theme === "dark");
-  try {
-    localStorage.setItem("theme", theme);
-  } catch {
-    // Private-window/blocked storage — the toggle still works for this
-    // page view, it just won't be remembered next visit.
-  }
-}
-
-// A single global toggle (rendered once in app/layout.tsx) rather than one
-// per page — same behavior on the login/signup screens as inside the
-// dashboard. Starts undefined so the very first client render matches
-// whatever theme-init-script.tsx already set on <html> before hydration
-// (see that file for why), then reads the real state from the DOM once
-// mounted.
+// Global floating toggle (rendered once in app/layout.tsx) so it's on
+// every page, including login/signup which have no sidebar to hold
+// theme-switch.tsx's labeled version.
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme | null>(null);
-
-  useEffect(() => {
-    setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
-  }, []);
-
+  const [theme, toggle] = useTheme();
   if (theme === null) return null;
-
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    applyTheme(next);
-    setTheme(next);
-  }
 
   return (
     <button
