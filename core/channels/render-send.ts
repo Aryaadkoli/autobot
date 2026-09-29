@@ -9,10 +9,15 @@ export type RenderedMessage = {
   bodyParameters: string[];
 };
 
+// Only these fields are actually read below — narrowed (rather than the
+// full Contact type) so a test-send preview can pass a synthetic,
+// never-persisted contact-like object without a real Contact row to back it.
+export type ContactForRender = Pick<Contact, "name" | "phone" | "email" | "attributes">;
+
 // Fills in a template's variables for a contact — pure, no network call,
 // so the workflow engine can insert link-tracking rewrites between this
 // and actually delivering the message.
-export function renderMessage(template: MessageTemplate, contact: Contact): RenderedMessage {
+export function renderMessage(template: MessageTemplate, contact: ContactForRender): RenderedMessage {
   const to = template.channel === "EMAIL" ? contact.email : contact.phone;
   if (!to) return { to: null, renderedBody: null, bodyParameters: [] };
 
@@ -59,7 +64,7 @@ export async function deliverRendered(
 export async function renderAndSend(
   template: MessageTemplate,
   tenant: Tenant,
-  contact: Contact
+  contact: ContactForRender
 ): Promise<
   | { to: string; renderedBody: string; result: ProviderResult; adapterName: string }
   | { to: null; renderedBody: null; result: null; adapterName: null }
