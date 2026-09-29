@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { STAGES } from "../contacts/stages";
 import ColumnMappingTable from "@/components/column-mapping-table";
-import { downloadSampleLeadsCsv } from "@/lib/sample-csv";
+import { downloadLeadsTemplateCsv } from "@/lib/sample-csv";
 import ScheduleCalendar from "./schedule-calendar";
 
 type Template = {
@@ -530,10 +530,10 @@ export default function CampaignsClient({
                   <div className="mt-4">
                     <button
                       type="button"
-                      onClick={() => downloadSampleLeadsCsv("campaign-list-template.csv")}
+                      onClick={() => downloadLeadsTemplateCsv("campaign-list-upload-format.csv")}
                       className="text-sm text-stone-500 hover:text-stone-800 underline cursor-pointer"
                     >
-                      Download a sample CSV template
+                      Download the CSV upload format
                     </button>
                   </div>
                 </div>

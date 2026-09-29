@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Modal from "@/components/modal";
 import ColumnMappingTable from "@/components/column-mapping-table";
-import { downloadSampleLeadsCsv } from "@/lib/sample-csv";
+import { downloadLeadsTemplateCsv } from "@/lib/sample-csv";
 
 type PreviewData = {
   filename: string;
@@ -125,10 +125,10 @@ export default function ImportModal({
           <div className="mt-4">
             <button
               type="button"
-              onClick={() => downloadSampleLeadsCsv()}
+              onClick={() => downloadLeadsTemplateCsv()}
               className="text-sm text-stone-500 hover:text-stone-800 underline cursor-pointer"
             >
-              Download a sample CSV template
+              Download the CSV upload format
             </button>
           </div>
         </div>

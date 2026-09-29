@@ -3,8 +3,9 @@
 // contact/location/product/opportunity fields, plus the Customer Status /
 // Lead Stage taxonomy — see lib/lead-stages.ts). Anything without a
 // dedicated Contact field lands in attributes.<slug> on import, same as any
-// other unmapped column.
-export function downloadSampleLeadsCsv(filename = "leads-template.csv") {
+// other unmapped column. Headers only, deliberately no example row — this
+// is the format to fill in and upload, not a demo file.
+export function downloadLeadsTemplateCsv(filename = "leads-upload-format.csv") {
   const headers = [
     "Partner Name",
     "Business",
@@ -30,34 +31,7 @@ export function downloadSampleLeadsCsv(filename = "leads-template.csv") {
     "Flags",
     "Notes",
   ];
-  const example = [
-    "Ramesh Traders",
-    "Agriculture",
-    "Ramesh Gowda",
-    "12 MG Road",
-    "Whitefield",
-    "Bengaluru",
-    "Bengaluru Urban",
-    "South",
-    "Karnataka",
-    "560066",
-    "9876543210",
-    "Areca",
-    "12.9716",
-    "77.5946",
-    "500000",
-    "50000",
-    "South India",
-    "Yes",
-    "No",
-    "Customer Acquisition Stages",
-    "Lead",
-    "",
-    "Interested in bulk order",
-  ];
-  const csv = [headers, example]
-    .map((row) => row.map((v) => `"${v.replace(/"/g, '""')}"`).join(","))
-    .join("\n");
+  const csv = headers.map((v) => `"${v.replace(/"/g, '""')}"`).join(",");
 
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
