@@ -9,18 +9,25 @@ import LeadModal, { type EditableLead } from "./lead-modal";
 import ImportModal from "./import-modal";
 import TagManagerModal from "./tag-manager-modal";
 import LeadDetailModal from "./lead-detail-modal";
+import TaxonomyManagerModal from "./taxonomy-manager-modal";
 
 export type LeadRow = {
   id: string;
   name: string | null;
   phone: string;
+  email: string | null;
   businessType: string | null;
   city: string | null;
+  region: string | null;
+  product: string | null;
   stage: string;
   customerStatus: { id: string; name: string } | null;
   leadStage: { id: string; name: string } | null;
+  createdAt: string;
   tags: { id: string; name: string }[];
 };
+
+const PAGE_SIZE = 30;
 
 type Tag = { id: string; name: string };
 type BusinessType = { id: string; name: string };
@@ -33,6 +40,7 @@ type ModalState =
   | { type: "view"; leadId: string }
   | { type: "import" }
   | { type: "tags" }
+  | { type: "taxonomy" }
   | null;
 
 export default function LeadsClient({
@@ -41,6 +49,7 @@ export default function LeadsClient({
   businessTypes,
   customerStatuses,
   leadStages,
+  canManageTaxonomy,
   activeStage,
   totalLeads,
   newLeadsCount,
@@ -52,6 +61,7 @@ export default function LeadsClient({
   businessTypes: BusinessType[];
   customerStatuses: CustomerStatus[];
   leadStages: LeadStageOption[];
+  canManageTaxonomy: boolean;
   activeStage?: string;
   totalLeads: number;
   newLeadsCount: number;
@@ -64,6 +74,7 @@ export default function LeadsClient({
   const [businessTypeFilter, setBusinessTypeFilter] = useState("");
   const [customerStatusFilter, setCustomerStatusFilter] = useState("");
   const [leadStageFilter, setLeadStageFilter] = useState("");
+  const [page, setPage] = useState(1);
   const [modal, setModal] = useState<ModalState>(() => {
     if (openImportOnLoad) return { type: "import" };
     if (openNewOnLoad) return { type: "add" };
@@ -115,12 +126,19 @@ export default function LeadsClient({
     setBusinessTypeFilter("");
     setCustomerStatusFilter("");
     setLeadStageFilter("");
+    setPage(1);
   }
 
   const filtered = leads.filter((l) => {
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      if (!((l.name ?? "").toLowerCase().includes(q) || l.phone.toLowerCase().includes(q))) {
+      if (
+        !(
+          (l.name ?? "").toLowerCase().includes(q) ||
+          l.phone.toLowerCase().includes(q) ||
+          (l.email ?? "").toLowerCase().includes(q)
+        )
+      ) {
         return false;
       }
     }
@@ -130,6 +148,14 @@ export default function LeadsClient({
     if (leadStageFilter && l.leadStage?.id !== leadStageFilter) return false;
     return true;
   });
+
+  // Derived during render rather than reset via an effect: clamping here
+  // means loosening/tightening a filter can never leave `page` pointing
+  // past the end of the now-different result set, without needing to
+  // watch every filter as a dependency just to reset one piece of state.
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   function toEditable(lead: LeadRow): EditableLead {
     return {
@@ -192,7 +218,7 @@ export default function LeadsClient({
           </svg>
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search by name or phone…"
             className="w-full rounded-full border border-stone-300 bg-white pl-10 pr-4 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           />
@@ -203,7 +229,7 @@ export default function LeadsClient({
       <div className="flex flex-wrap items-center justify-center gap-2 mb-5">
         <select
           value={stageFilter}
-          onChange={(e) => setStageFilter(e.target.value)}
+          onChange={(e) => { setStageFilter(e.target.value); setPage(1); }}
           className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
         >
           <option value="">All stages</option>
@@ -217,7 +243,7 @@ export default function LeadsClient({
         {businessTypes.length > 0 && (
           <select
             value={businessTypeFilter}
-            onChange={(e) => setBusinessTypeFilter(e.target.value)}
+            onChange={(e) => { setBusinessTypeFilter(e.target.value); setPage(1); }}
             className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           >
             <option value="">All business types</option>
@@ -232,7 +258,7 @@ export default function LeadsClient({
         {customerStatuses.length > 0 && (
           <select
             value={customerStatusFilter}
-            onChange={(e) => setCustomerStatusFilter(e.target.value)}
+            onChange={(e) => { setCustomerStatusFilter(e.target.value); setPage(1); }}
             className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           >
             <option value="">All customer statuses</option>
@@ -247,7 +273,7 @@ export default function LeadsClient({
         {leadStages.length > 0 && (
           <select
             value={leadStageFilter}
-            onChange={(e) => setLeadStageFilter(e.target.value)}
+            onChange={(e) => { setLeadStageFilter(e.target.value); setPage(1); }}
             className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           >
             <option value="">All lead stages</option>
@@ -270,6 +296,14 @@ export default function LeadsClient({
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2 mb-5">
+        {canManageTaxonomy && (
+          <button
+            onClick={() => setModal({ type: "taxonomy" })}
+            className="rounded-lg border border-stone-300 text-stone-700 text-sm px-3 py-1.5 hover:bg-stone-100 cursor-pointer"
+          >
+            Manage statuses &amp; stages
+          </button>
+        )}
         <button
           onClick={() => setModal({ type: "tags" })}
           className="rounded-lg border border-stone-300 text-stone-700 text-sm px-3 py-1.5 hover:bg-stone-100 cursor-pointer"
@@ -304,21 +338,25 @@ export default function LeadsClient({
       ) : (
         <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px]">
+          <table className="w-full text-sm min-w-[1400px]">
             <thead>
               <tr className="text-left text-stone-500 border-b border-stone-200">
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Phone</th>
+                <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Business type</th>
+                <th className="px-4 py-3 font-medium">City / Region</th>
+                <th className="px-4 py-3 font-medium">Product</th>
                 <th className="px-4 py-3 font-medium">Stage</th>
                 <th className="px-4 py-3 font-medium">Customer status</th>
                 <th className="px-4 py-3 font-medium">Lead stage</th>
                 <th className="px-4 py-3 font-medium">Tags</th>
+                <th className="px-4 py-3 font-medium">Added</th>
                 <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((lead) => (
+              {paginated.map((lead) => (
                 <tr key={lead.id} className="border-b border-stone-100 last:border-0">
                   <td className="px-4 py-3">
                     <button
@@ -329,9 +367,14 @@ export default function LeadsClient({
                     </button>
                   </td>
                   <td className="px-4 py-3 text-stone-600">{lead.phone}</td>
+                  <td className="px-4 py-3 text-stone-600">{lead.email ?? "—"}</td>
                   <td className="px-4 py-3 text-stone-600">
                     {lead.businessType ?? "—"}
                   </td>
+                  <td className="px-4 py-3 text-stone-600">
+                    {[lead.city, lead.region].filter(Boolean).join(" / ") || "—"}
+                  </td>
+                  <td className="px-4 py-3 text-stone-600">{lead.product ?? "—"}</td>
                   <td className="px-4 py-3">
                     <StageBadge stage={lead.stage} />
                   </td>
@@ -352,6 +395,13 @@ export default function LeadsClient({
                         </span>
                       ))}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-stone-500 whitespace-nowrap">
+                    {new Date(lead.createdAt).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-3">
@@ -375,6 +425,34 @@ export default function LeadsClient({
             </tbody>
           </table>
           </div>
+
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-stone-200 text-sm">
+              <span className="text-stone-500">
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+                {Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-default cursor-pointer"
+                >
+                  Previous
+                </button>
+                <span className="text-stone-500">
+                  Page {currentPage} of {pageCount}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                  disabled={currentPage === pageCount}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-default cursor-pointer"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -419,6 +497,15 @@ export default function LeadsClient({
       {modal?.type === "tags" && (
         <TagManagerModal
           tags={allTags}
+          onClose={() => setModal(null)}
+          onChanged={refresh}
+        />
+      )}
+
+      {modal?.type === "taxonomy" && (
+        <TaxonomyManagerModal
+          customerStatuses={customerStatuses}
+          leadStages={leadStages}
           onClose={() => setModal(null)}
           onChanged={refresh}
         />

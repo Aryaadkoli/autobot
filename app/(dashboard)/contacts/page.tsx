@@ -1,6 +1,6 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
-import { canView } from "@/lib/permissions";
+import { canView, isOwnerTier } from "@/lib/permissions";
 import NoModuleAccess from "../no-module-access";
 import { STAGES } from "./stages";
 import LeadsClient, { type LeadRow } from "./leads-client";
@@ -26,11 +26,17 @@ export default async function ContactsPage({
         where: { tenantId },
         orderBy: { createdAt: "desc" },
         take: 200,
-        include: {
-          tags: { include: { tag: true } },
-          businessType: true,
-          customerStatus: true,
-          leadStage: true,
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          email: true,
+          attributes: true,
+          createdAt: true,
+          businessType: { select: { name: true } },
+          customerStatus: { select: { id: true, name: true } },
+          leadStage: { select: { id: true, name: true } },
+          tags: { select: { tag: { select: { id: true, name: true } } } },
         },
       }),
       prisma.tag.findMany({ where: { tenantId }, orderBy: { name: "asc" } }),
@@ -55,16 +61,20 @@ export default async function ContactsPage({
     ]);
 
   const leads: LeadRow[] = contacts.map((c) => {
-    const attrs = c.attributes as { stage?: string; city?: string } | null;
+    const attrs = c.attributes as Record<string, unknown> | null;
     return {
       id: c.id,
       name: c.name,
       phone: c.phone,
+      email: c.email,
       businessType: c.businessType?.name ?? null,
-      city: attrs?.city ?? null,
-      stage: attrs?.stage ?? "new",
+      city: (attrs?.city as string | undefined) ?? null,
+      region: (attrs?.region as string | undefined) ?? null,
+      product: (attrs?.product as string | undefined) ?? null,
+      stage: (attrs?.stage as string | undefined) ?? "new",
       customerStatus: c.customerStatus ? { id: c.customerStatus.id, name: c.customerStatus.name } : null,
       leadStage: c.leadStage ? { id: c.leadStage.id, name: c.leadStage.name } : null,
+      createdAt: c.createdAt.toISOString(),
       tags: c.tags.map((t) => ({ id: t.tag.id, name: t.tag.name })),
     };
   });
@@ -77,6 +87,7 @@ export default async function ContactsPage({
         businessTypes={businessTypes}
         customerStatuses={customerStatuses}
         leadStages={leadStages}
+        canManageTaxonomy={isOwnerTier(session.role)}
         activeStage={activeStage}
         totalLeads={totalLeads}
         newLeadsCount={newLeadsCount}

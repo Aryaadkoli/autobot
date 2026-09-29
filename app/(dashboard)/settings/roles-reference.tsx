@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 type RoleRow = { id: string; name: string; isSystem: boolean; deleted: boolean; memberCount: number };
 
 const SYSTEM_ROLE_INFO: Record<string, string> = {
-  OWNER: "Full control — the only role that can manage the team, connect WhatsApp, and change sending limits.",
+  OWNER: "Full control — the only role that can manage the team, change sending limits, and manage customer statuses & lead stages.",
   CO_OWNER: "Everything OWNER can do, except it can't remove an OWNER or another CO_OWNER's account.",
   MEMBER: "Whatever the owner has switched on for it below — starts out able to see (not edit) Leads, Templates, Campaigns, and Workflows.",
 };
