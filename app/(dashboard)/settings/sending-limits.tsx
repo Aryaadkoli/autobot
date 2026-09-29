@@ -58,7 +58,7 @@ export default function SendingLimits({
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 p-6 max-w-2xl">
+    <div className="bg-white rounded-2xl border border-stone-200 p-6 h-full">
       <h2 className="text-sm font-medium text-stone-700">Sending limits</h2>
       <p className="text-sm text-stone-500 mt-1">
         Applied to every send automatically — Campaigns, Scheduled

@@ -29,6 +29,80 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  position: relative;
+}
+
+/* Soft, fixed decorative color underneath the whole app — glass cards
+   need something with texture behind them to actually read as "glass"
+   instead of just a plain semi-transparent gray box. Fixed + behind
+   everything (z-index -1) so it doesn't scroll or interfere with layout. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(251, 191, 36, 0.10), transparent 40%),
+    radial-gradient(circle at 85% 25%, rgba(120, 113, 108, 0.10), transparent 45%),
+    radial-gradient(circle at 50% 90%, rgba(217, 119, 6, 0.08), transparent 40%);
+}
+
+.dark body::before {
+  background:
+    radial-gradient(circle at 15% 10%, rgba(251, 191, 36, 0.08), transparent 40%),
+    radial-gradient(circle at 85% 25%, rgba(168, 162, 158, 0.06), transparent 45%),
+    radial-gradient(circle at 50% 90%, rgba(217, 119, 6, 0.10), transparent 40%);
+}
+
+/*
+ * Glass cards: the dominant "card" signature across the app is the
+ * compound class combo bg-white + rounded-2xl (+ a border-stone-* class),
+ * used ~35 times across ~17 files. Retargeting that combo here — instead
+ * of hand-editing every file — gives every card, modal, and table panel a
+ * consistent frosted-glass treatment in one place, light and dark alike.
+ */
+.bg-white.rounded-2xl {
+  background-color: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 8px 32px -12px rgba(0, 0, 0, 0.12);
+}
+.dark .bg-white.rounded-2xl {
+  background-color: rgba(28, 25, 23, 0.72);
+  box-shadow: 0 8px 32px -12px rgba(0, 0, 0, 0.5);
+}
+/* Also cover the smaller rounded-xl cards used for stat tiles etc. */
+.bg-white.rounded-xl {
+  background-color: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+}
+.dark .bg-white.rounded-xl {
+  background-color: rgba(28, 25, 23, 0.72);
+}
+/* Modals sit on top of their own dark bg-black/40 backdrop (see
+   components/modal.tsx) — the same tint reads as a near-invisible gray
+   ghost there, so it needs to be a bit more opaque than a regular card,
+   just not so much it stops looking like glass. */
+.fixed.inset-0.bg-black\/40 .bg-white.rounded-2xl {
+  background-color: rgba(255, 255, 255, 0.88);
+}
+.dark .fixed.inset-0.bg-black\/40 .bg-white.rounded-2xl {
+  background-color: rgba(28, 25, 23, 0.85);
+}
+/* Softer, translucent edges on glass cards instead of a solid gray line. */
+.bg-white.rounded-2xl.border-stone-200,
+.bg-white.rounded-2xl.border-stone-100,
+.bg-white.rounded-xl.border-stone-200,
+.bg-white.rounded-xl.border-stone-100 {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+.dark .bg-white.rounded-2xl.border-stone-200,
+.dark .bg-white.rounded-2xl.border-stone-100,
+.dark .bg-white.rounded-xl.border-stone-200,
+.dark .bg-white.rounded-xl.border-stone-100 {
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 /*

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Mascot from "@/components/mascot";
 import { STAGES } from "./stages";
@@ -61,6 +60,10 @@ export default function LeadsClient({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [stageFilter, setStageFilter] = useState(activeStage ?? "");
+  const [businessTypeFilter, setBusinessTypeFilter] = useState("");
+  const [customerStatusFilter, setCustomerStatusFilter] = useState("");
+  const [leadStageFilter, setLeadStageFilter] = useState("");
   const [modal, setModal] = useState<ModalState>(() => {
     if (openImportOnLoad) return { type: "import" };
     if (openNewOnLoad) return { type: "add" };
@@ -102,12 +105,30 @@ export default function LeadsClient({
     }
   }
 
+  const hasActiveFilters = Boolean(
+    search.trim() || stageFilter || businessTypeFilter || customerStatusFilter || leadStageFilter
+  );
+
+  function resetFilters() {
+    setSearch("");
+    setStageFilter("");
+    setBusinessTypeFilter("");
+    setCustomerStatusFilter("");
+    setLeadStageFilter("");
+  }
+
   const filtered = leads.filter((l) => {
-    if (!search.trim()) return true;
-    const q = search.trim().toLowerCase();
-    return (
-      (l.name ?? "").toLowerCase().includes(q) || l.phone.toLowerCase().includes(q)
-    );
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      if (!((l.name ?? "").toLowerCase().includes(q) || l.phone.toLowerCase().includes(q))) {
+        return false;
+      }
+    }
+    if (stageFilter && l.stage !== stageFilter) return false;
+    if (businessTypeFilter && l.businessType !== businessTypeFilter) return false;
+    if (customerStatusFilter && l.customerStatus?.id !== customerStatusFilter) return false;
+    if (leadStageFilter && l.leadStage?.id !== leadStageFilter) return false;
+    return true;
   });
 
   function toEditable(lead: LeadRow): EditableLead {
@@ -154,59 +175,119 @@ export default function LeadsClient({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/contacts"
-            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-              !activeStage
-                ? "bg-stone-900 text-white border-stone-900"
-                : "bg-white text-stone-600 border-stone-200 hover:bg-stone-100"
-            }`}
+      {/* Centered search — the primary way to find a lead */}
+      <div className="flex justify-center mb-4">
+        <div className="relative w-full max-w-lg">
+          <svg
+            viewBox="0 0 24 24"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400"
           >
-            All
-          </Link>
-          {STAGES.map((s) => (
-            <Link
-              key={s.value}
-              href={`/contacts?stage=${s.value}`}
-              className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                activeStage === s.value
-                  ? "bg-stone-900 text-white border-stone-900"
-                  : "bg-white text-stone-600 border-stone-200 hover:bg-stone-100"
-              }`}
-            >
-              {s.label}
-            </Link>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name or phone…"
-            className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            placeholder="Search by name or phone…"
+            className="w-full rounded-full border border-stone-300 bg-white pl-10 pr-4 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           />
-          <button
-            onClick={() => setModal({ type: "tags" })}
-            className="rounded-lg border border-stone-300 text-stone-700 text-sm px-3 py-1.5 hover:bg-stone-100 cursor-pointer"
-          >
-            Manage tags
-          </button>
-          <button
-            onClick={() => setModal({ type: "import" })}
-            className="rounded-lg border border-stone-300 text-stone-700 text-sm px-3 py-1.5 hover:bg-stone-100 cursor-pointer"
-          >
-            Import
-          </button>
-          <button
-            onClick={() => setModal({ type: "add" })}
-            className="rounded-lg bg-stone-900 text-white text-sm px-3 py-1.5 hover:bg-stone-800 cursor-pointer"
-          >
-            + Add lead
-          </button>
         </div>
+      </div>
+
+      {/* Field filters + reset */}
+      <div className="flex flex-wrap items-center justify-center gap-2 mb-5">
+        <select
+          value={stageFilter}
+          onChange={(e) => setStageFilter(e.target.value)}
+          className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+        >
+          <option value="">All stages</option>
+          {STAGES.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+
+        {businessTypes.length > 0 && (
+          <select
+            value={businessTypeFilter}
+            onChange={(e) => setBusinessTypeFilter(e.target.value)}
+            className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+          >
+            <option value="">All business types</option>
+            {businessTypes.map((bt) => (
+              <option key={bt.id} value={bt.name}>
+                {bt.name}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {customerStatuses.length > 0 && (
+          <select
+            value={customerStatusFilter}
+            onChange={(e) => setCustomerStatusFilter(e.target.value)}
+            className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+          >
+            <option value="">All customer statuses</option>
+            {customerStatuses.map((cs) => (
+              <option key={cs.id} value={cs.id}>
+                {cs.name}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {leadStages.length > 0 && (
+          <select
+            value={leadStageFilter}
+            onChange={(e) => setLeadStageFilter(e.target.value)}
+            className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+          >
+            <option value="">All lead stages</option>
+            {leadStages.map((ls) => (
+              <option key={ls.id} value={ls.id}>
+                {ls.name}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {hasActiveFilters && (
+          <button
+            onClick={resetFilters}
+            className="rounded-lg border border-stone-300 text-stone-500 text-sm px-3 py-1.5 hover:bg-stone-100 hover:text-stone-700 cursor-pointer"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2 mb-5">
+        <button
+          onClick={() => setModal({ type: "tags" })}
+          className="rounded-lg border border-stone-300 text-stone-700 text-sm px-3 py-1.5 hover:bg-stone-100 cursor-pointer"
+        >
+          Manage tags
+        </button>
+        <button
+          onClick={() => setModal({ type: "import" })}
+          className="rounded-lg border border-stone-300 text-stone-700 text-sm px-3 py-1.5 hover:bg-stone-100 cursor-pointer"
+        >
+          Import
+        </button>
+        <button
+          onClick={() => setModal({ type: "add" })}
+          className="rounded-lg bg-stone-900 text-white text-sm px-3 py-1.5 hover:bg-stone-800 cursor-pointer"
+        >
+          + Add lead
+        </button>
       </div>
 
       {filtered.length === 0 ? (
@@ -222,7 +303,8 @@ export default function LeadsClient({
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="text-left text-stone-500 border-b border-stone-200">
                 <th className="px-4 py-3 font-medium">Name</th>
@@ -292,6 +374,7 @@ export default function LeadsClient({
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

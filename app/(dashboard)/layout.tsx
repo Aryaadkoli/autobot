@@ -59,7 +59,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="h-screen flex bg-stone-100 overflow-hidden">
+    <div className="h-screen flex bg-stone-100/70 dark:bg-stone-950/60 overflow-hidden">
       <Sidebar
         tenantName={tenant.name}
         userName={account.name}
@@ -70,7 +70,9 @@ export default async function DashboardLayout({
         logoutAction={logout}
       />
 
-      <main className="flex-1 overflow-y-auto p-8">{children}</main>
+      <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 pt-16 sm:p-6 sm:pt-16 lg:p-8">
+        {children}
+      </main>
     </div>
   );
 }

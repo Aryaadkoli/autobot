@@ -38,7 +38,7 @@ export default async function SelectTenantPage() {
             <form key={m.tenantId} action={pick}>
               <button
                 type="submit"
-                className="w-full text-left rounded-2xl border border-stone-800 bg-stone-900 p-5 hover:border-amber-500/60 hover:bg-stone-800 transition-colors cursor-pointer"
+                className="w-full text-left rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-5 hover:border-amber-500/60 hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <div className="text-lg font-medium text-white">{m.tenantName}</div>
                 <div className="text-[11px] text-amber-500/80 mt-1 uppercase tracking-wide">

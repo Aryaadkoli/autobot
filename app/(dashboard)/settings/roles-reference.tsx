@@ -92,7 +92,7 @@ export default function RolesReference({ roles, canEdit }: { roles: RoleRow[]; c
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 p-6 max-w-2xl">
+    <div className="bg-white rounded-2xl border border-stone-200 p-6 h-full">
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-sm font-medium text-stone-700">Roles</h2>
         {canEdit && (

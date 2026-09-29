@@ -17,7 +17,7 @@ export default function PasswordInput({
         type={visible ? "text" : "password"}
         required
         autoComplete={autoComplete}
-        className="w-full rounded-lg border border-stone-800 bg-stone-900 px-3.5 py-2.5 pr-11 text-base text-white placeholder-stone-500 outline-none transition-all duration-150 focus:scale-[1.01] focus:border-amber-500/60 focus:ring-4 focus:ring-amber-500/10"
+        className="w-full rounded-lg border border-white/10 bg-white/5 backdrop-blur-sm px-3.5 py-2.5 pr-11 text-base text-white placeholder-stone-500 outline-none transition-all duration-150 focus:scale-[1.01] focus:border-amber-500/60 focus:ring-4 focus:ring-amber-500/10"
       />
       <button
         type="button"

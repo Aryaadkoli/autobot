@@ -52,7 +52,7 @@ export default function SettingsClient({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4 max-w-2xl">
+      <div className="flex items-center justify-between mb-4">
         <h2 className="text-sm font-medium text-stone-700">Team members</h2>
         {canEdit && (
           <button
@@ -64,7 +64,8 @@ export default function SettingsClient({
         )}
       </div>
 
-      <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden max-w-2xl">
+      <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-stone-500 border-b border-stone-200">
@@ -106,6 +107,7 @@ export default function SettingsClient({
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {showAdd && (

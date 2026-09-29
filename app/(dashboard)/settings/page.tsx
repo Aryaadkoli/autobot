@@ -2,7 +2,6 @@ import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
 import { canView, canEdit } from "@/lib/permissions";
 import SettingsClient from "./settings-client";
-import WhatsAppConnection from "./whatsapp-connection";
 import SendingLimits from "./sending-limits";
 import RolesReference from "./roles-reference";
 import OrganizationsSection from "./organizations-section";
@@ -34,9 +33,6 @@ export default async function SettingsPage() {
     prisma.tenant.findUniqueOrThrow({
       where: { id: session.tenantId },
       select: {
-        waPhoneNumberId: true,
-        waBusinessAcctId: true,
-        waAccessTokenEnc: true,
         timezone: true,
         dailyCapPerContact: true,
         quietHoursStart: true,
@@ -47,47 +43,42 @@ export default async function SettingsPage() {
 
   // Organizations is always shown (open to everyone regardless of role
   // or module permission — see organizations-section.tsx), so this only
-  // needs to flag when the *other* sections (WhatsApp/limits, Team) are
-  // both hidden, not the whole page.
+  // needs to flag when the *other* sections (limits, Team) are both
+  // hidden, not the whole page.
   const restOfPageHidden = !seeSettings && !seeTeam;
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-stone-900 mb-6">Settings</h1>
-
-      <div className="mb-8">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
+          Settings
+        </h1>
+        {/* A lightweight option next to the title, not a whole section —
+            creating an org is rare enough that it shouldn't compete with
+            the settings people actually use every day. */}
         <OrganizationsSection />
       </div>
 
       {restOfPageHidden && (
-        <p className="text-sm text-stone-500 bg-white rounded-2xl border border-stone-200 p-6 max-w-2xl">
-          You don&apos;t have access to WhatsApp connection, sending limits, or team settings. Ask the account owner if you need something changed here.
+        <p className="text-sm text-stone-500 bg-white rounded-2xl border border-stone-200 p-6 max-w-2xl mb-6">
+          You don&apos;t have access to sending limits or team settings. Ask the account owner if you need something changed here.
         </p>
       )}
 
-      {seeSettings && (
-        <>
-          <WhatsAppConnection
+      {/* Side by side on wide screens so nothing needs its own scroll —
+          each section fills its grid cell instead of capping its own width. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {seeSettings && (
+          <SendingLimits
             canEdit={editSettings}
-            connected={Boolean(tenant.waPhoneNumberId && tenant.waAccessTokenEnc)}
-            phoneNumberId={tenant.waPhoneNumberId}
-            businessAcctId={tenant.waBusinessAcctId}
+            timezone={tenant.timezone}
+            dailyCapPerContact={tenant.dailyCapPerContact}
+            quietHoursStart={tenant.quietHoursStart}
+            quietHoursEnd={tenant.quietHoursEnd}
           />
+        )}
 
-          <div className="mt-8">
-            <SendingLimits
-              canEdit={editSettings}
-              timezone={tenant.timezone}
-              dailyCapPerContact={tenant.dailyCapPerContact}
-              quietHoursStart={tenant.quietHoursStart}
-              quietHoursEnd={tenant.quietHoursEnd}
-            />
-          </div>
-        </>
-      )}
-
-      {seeTeam && (
-        <div className="mt-10">
+        {seeTeam && (
           <SettingsClient
             canEdit={editTeam}
             users={membershipRows.map((u) => ({
@@ -102,11 +93,9 @@ export default async function SettingsPage() {
             currentUserId={session.userId}
             currentUserRole={session.role}
           />
-        </div>
-      )}
+        )}
 
-      {seeTeam && (
-        <div className="mt-8">
+        {seeTeam && (
           <RolesReference
             canEdit={editTeam}
             roles={roleRows.map((r) => ({
@@ -117,8 +106,8 @@ export default async function SettingsPage() {
               memberCount: r._count.users,
             }))}
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

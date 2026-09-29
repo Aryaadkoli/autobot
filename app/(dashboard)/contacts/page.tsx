@@ -20,12 +20,10 @@ export default async function ContactsPage({
   const [contacts, tags, businessTypes, customerStatuses, leadStages, totalLeads, newLeadsCount] =
     await Promise.all([
       prisma.contact.findMany({
-        where: {
-          tenantId,
-          ...(activeStage
-            ? { attributes: { path: ["stage"], equals: activeStage } }
-            : {}),
-        },
+        // Stage/business type/customer status/lead stage are all filtered
+        // client-side now (see leads-client.tsx) — the whole page's worth
+        // of leads is fetched once, same as search already worked.
+        where: { tenantId },
         orderBy: { createdAt: "desc" },
         take: 200,
         include: {
