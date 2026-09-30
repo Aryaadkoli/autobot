@@ -78,6 +78,42 @@ export default async function LoginPage({
               </li>
             ))}
           </ul>
+
+          <div className="mt-10 grid grid-cols-3 gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 opacity-0 [animation:fade-in-up_0.5s_ease-out_0.4s_forwards]">
+            {[
+              {
+                label: "WhatsApp-first",
+                icon: (
+                  <path d="M12 3a9 9 0 0 0-7.8 13.4L3 21l4.8-1.2A9 9 0 1 0 12 3Zm4.6 12.7c-.2.6-1.2 1.1-1.7 1.2-.4.1-1 .1-1.6-.1-.4-.1-.9-.3-1.5-.6-2.6-1.1-4.3-3.8-4.5-4-.1-.2-1-1.4-1-2.6s.6-1.8.9-2c.2-.2.5-.3.7-.3h.5c.2 0 .4 0 .6.4l.8 1.9c.1.2.1.4 0 .6l-.3.5c-.1.2-.2.3-.1.5.2.3.8 1.3 1.7 2 1.1.9 2 1.2 2.3 1.3.2.1.4.1.5-.1l.6-.7c.2-.2.4-.2.6-.1l1.7.8c.2.1.3.2.4.3.1.2.1.7-.1 1.3Z" />
+                ),
+              },
+              {
+                label: "Auto follow-up",
+                icon: <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" />,
+              },
+              {
+                label: "Real analytics",
+                icon: <path d="M4 20V10M11 20V4M18 20v-7" />,
+              },
+            ].map((f) => (
+              <div key={f.label} className="flex flex-col items-center text-center gap-2">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-amber-400"
+                >
+                  {f.icon}
+                </svg>
+                <span className="text-xs text-stone-300 leading-tight">{f.label}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         <p className="relative text-xs text-stone-600 opacity-0 [animation:fade-in-up_0.5s_ease-out_0.5s_forwards]">
@@ -95,7 +131,8 @@ export default async function LoginPage({
       />
 
       <div className="relative w-full max-w-[380px]">
-        <div className="mb-10 flex flex-col items-center text-center opacity-0 [animation:fade-in-up_0.5s_ease-out_forwards]">
+        <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-2xl shadow-2xl p-8">
+        <div className="mb-8 flex flex-col items-center text-center opacity-0 [animation:fade-in-up_0.5s_ease-out_forwards]">
           <span className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-500/80">
             Customer Automation, Simplified
           </span>
@@ -135,12 +172,17 @@ export default async function LoginPage({
           </div>
 
           <div className="space-y-2 opacity-0 [animation:fade-in-up_0.5s_ease-out_0.2s_forwards]">
-            <label
-              className="text-sm font-medium text-stone-300"
-              htmlFor="password"
-            >
-              Password
-            </label>
+            <div className="flex items-center justify-between">
+              <label
+                className="text-sm font-medium text-stone-300"
+                htmlFor="password"
+              >
+                Password
+              </label>
+              <Link href="/forgot-password" className="text-xs font-medium text-amber-400 hover:text-amber-300 hover:underline">
+                Forgot password?
+              </Link>
+            </div>
             <PasswordInput />
           </div>
 
@@ -155,6 +197,7 @@ export default async function LoginPage({
             Create an account
           </Link>
         </p>
+        </div>
 
         <div className="mt-6 flex flex-col items-center gap-2 opacity-0 [animation:fade-in-up_0.5s_ease-out_0.4s_forwards]">
           <div className="flex items-center gap-1.5 text-xs text-stone-500">

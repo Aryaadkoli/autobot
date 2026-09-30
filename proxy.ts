@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 
 // /select-tenant and the no-tenant empty state still require a real session — they're reached only via the dashboard layout's gate, not exempted here.
-const PUBLIC_PATHS = new Set(["/login", "/signup"]);
+const PUBLIC_PATHS = new Set(["/login", "/signup", "/forgot-password", "/reset-password"]);
 
 export default auth((req) => {
   const isPublic = PUBLIC_PATHS.has(req.nextUrl.pathname);
