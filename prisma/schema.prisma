@@ -14,7 +14,7 @@ datasource db {
 // ─────────────────────────────────────────────
 
 model Tenant {
-  id       String @id @default(cuid())
+  id       String @id @default(ulid())
   name     String
   slug     String @unique // used in URLs, e.g. app.autobot.in/t/alpha-corp
   timezone String @default("Asia/Kolkata")
@@ -27,9 +27,10 @@ model Tenant {
   brevoApiKeyEnc   String? // encrypted
 
   // Platform-wide guardrails
-  dailyCapPerContact Int @default(3) // frequency cap: max messages/contact/24h
-  quietHoursStart    Int @default(21) // no sends after 21:00 local
-  quietHoursEnd      Int @default(9) // no sends before 09:00 local
+  sendingLimitsEnabled Boolean @default(true) // off = the daily cap and quiet hours below are not enforced (opt-out is separate and always enforced)
+  dailyCapPerContact   Int     @default(3) // frequency cap: max messages/contact/24h
+  quietHoursStart      Int     @default(21) // no sends after 21:00 local
+  quietHoursEnd        Int     @default(9) // no sends before 09:00 local
 
   createdAt DateTime @default(now())
 
@@ -66,7 +67,7 @@ enum Plan {
 // Tenant and ADMIN of another via two separate User rows sharing this one
 // Account, instead of two disconnected logins with separate passwords.
 model Account {
-  id           String   @id @default(cuid())
+  id           String   @id @default(ulid())
   email        String   @unique
   passwordHash String
   name         String
@@ -82,7 +83,7 @@ model Account {
 // reset anyone's password. One-time use (usedAt) and short-lived
 // (expiresAt) — see lib/password-reset.ts.
 model PasswordResetToken {
-  id        String    @id @default(cuid())
+  id        String    @id @default(ulid())
   accountId String
   account   Account   @relation(fields: [accountId], references: [id])
   tokenHash String    @unique
@@ -98,7 +99,7 @@ model PasswordResetToken {
 // still key off this row exactly as before; only identity moved out to
 // Account.
 model User {
-  id        String    @id @default(cuid())
+  id        String    @id @default(ulid())
   tenantId  String
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   accountId String
@@ -129,7 +130,7 @@ model User {
 // permission. MEMBER and any custom role the owner creates are governed
 // entirely by their RolePermission rows.
 model Role {
-  id          String           @id @default(cuid())
+  id          String           @id @default(ulid())
   tenantId    String
   tenant      Tenant           @relation(fields: [tenantId], references: [id])
   name        String // "OWNER" / "CO_OWNER" / "MEMBER" or a custom name
@@ -158,7 +159,7 @@ model Role {
 // it; a module with no row at all means no access, same as canView/
 // canEdit both false.
 model RolePermission {
-  id      String  @id @default(cuid())
+  id      String  @id @default(ulid())
   roleId  String
   role    Role    @relation(fields: [roleId], references: [id])
   module  Module
@@ -184,7 +185,7 @@ enum Module {
 // ─────────────────────────────────────────────
 
 model BusinessType {
-  id       String    @id @default(cuid())
+  id       String    @id @default(ulid())
   tenantId String
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   name     String // e.g. "Distribution", "Retail"
@@ -195,7 +196,7 @@ model BusinessType {
 }
 
 model Service {
-  id             String       @id @default(cuid())
+  id             String       @id @default(ulid())
   tenantId       String
   tenant         Tenant       @relation(fields: [tenantId], references: [id])
   businessTypeId String
@@ -221,7 +222,7 @@ enum ServiceType {
 // ─────────────────────────────────────────────
 
 model Contact {
-  id             String        @id @default(cuid())
+  id             String        @id @default(ulid())
   tenantId       String
   tenant         Tenant        @relation(fields: [tenantId], references: [id])
   phone          String // E.164, e.g. +919812345678 — primary identity in India
@@ -277,7 +278,7 @@ model Contact {
 // called from lib/accounts.ts and both seed scripts) — not user-editable
 // in this cut, hence isSystem defaulting true throughout.
 model CustomerStatus {
-  id         String      @id @default(cuid())
+  id         String      @id @default(ulid())
   tenantId   String
   tenant     Tenant      @relation(fields: [tenantId], references: [id])
   name       String
@@ -295,7 +296,7 @@ model CustomerStatus {
 // CustomerStatus (e.g. "Negotiation" is both an Upsell and a Cross-Sell
 // stage) — uniqueness is scoped to the parent status, not the tenant.
 model LeadStage {
-  id               String         @id @default(cuid())
+  id               String         @id @default(ulid())
   tenantId         String
   tenant           Tenant         @relation(fields: [tenantId], references: [id])
   customerStatusId String
@@ -311,7 +312,7 @@ model LeadStage {
 }
 
 model Tag {
-  id                 String              @id @default(cuid())
+  id                 String              @id @default(ulid())
   tenantId           String
   tenant             Tenant              @relation(fields: [tenantId], references: [id])
   name               String // "dormant-30d", "high-value", "interested-productX"
@@ -339,7 +340,7 @@ model ContactTag {
 
 // The Categorization Script from the spec — rules stored as data, editable in UI later
 model TagRule {
-  id        String    @id @default(cuid())
+  id        String    @id @default(ulid())
   tenantId  String
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   name      String // "Mark dormant after 30 days"
@@ -364,7 +365,7 @@ enum RuleRunOn {
 // ─────────────────────────────────────────────
 
 model Import {
-  id            String       @id @default(cuid())
+  id            String       @id @default(ulid())
   tenantId      String
   tenant        Tenant       @relation(fields: [tenantId], references: [id])
   filename      String
@@ -386,7 +387,7 @@ enum ImportStatus {
 }
 
 model ApiKey {
-  id         String    @id @default(cuid())
+  id         String    @id @default(ulid())
   tenantId   String
   tenant     Tenant    @relation(fields: [tenantId], references: [id])
   name       String // "ERP webhook key"
@@ -401,7 +402,7 @@ model ApiKey {
 // ─────────────────────────────────────────────
 
 model Event {
-  id         String    @id @default(cuid())
+  id         String    @id @default(ulid())
   tenantId   String
   tenant     Tenant    @relation(fields: [tenantId], references: [id])
   contactId  String
@@ -434,7 +435,7 @@ enum EventType {
 // ─────────────────────────────────────────────
 
 model Workflow {
-  id         String         @id @default(cuid())
+  id         String         @id @default(ulid())
   tenantId   String
   tenant     Tenant         @relation(fields: [tenantId], references: [id])
   serviceId  String
@@ -465,7 +466,7 @@ enum WorkflowStatus {
 
 // One row per (contact × workflow run) — the "State Table" from the spec
 model SequenceInstance {
-  id         String   @id @default(cuid())
+  id         String   @id @default(ulid())
   tenantId   String
   tenant     Tenant   @relation(fields: [tenantId], references: [id])
   contactId  String
@@ -503,7 +504,7 @@ enum InstanceStatus {
 // ─────────────────────────────────────────────
 
 model MessageTemplate {
-  id       String  @id @default(cuid())
+  id       String  @id @default(ulid())
   tenantId String
   tenant   Tenant  @relation(fields: [tenantId], references: [id])
   name     String // internal name used in workflow JSON: "payment_reminder_1"
@@ -540,7 +541,7 @@ model MessageTemplate {
 // no recurrence, no behavior triggers, just "at time X, run this campaign."
 // Picked up by the in-process scheduler in instrumentation.ts.
 model ScheduledCampaign {
-  id         String          @id @default(cuid())
+  id         String          @id @default(ulid())
   tenantId   String
   tenant     Tenant          @relation(fields: [tenantId], references: [id])
   templateId String
@@ -578,7 +579,7 @@ enum ScheduledCampaignStatus {
 // One row per Campaigns-page send — a lightweight run log (not the full
 // enrollment/state-machine model Phase 4's workflow engine will bring).
 model Campaign {
-  id         String           @id @default(cuid())
+  id         String           @id @default(ulid())
   tenantId   String
   tenant     Tenant           @relation(fields: [tenantId], references: [id])
   templateId String?
@@ -618,7 +619,7 @@ enum TemplateApproval {
 }
 
 model Message {
-  id         String           @id @default(cuid())
+  id         String           @id @default(ulid())
   tenantId   String
   tenant     Tenant           @relation(fields: [tenantId], references: [id])
   contactId  String
@@ -661,7 +662,7 @@ enum MessageStatus {
 
 // Every outbound URL is rewritten to autobot.in/r/{token} → click = trackable event
 model Link {
-  id        String  @id @default(cuid())
+  id        String  @id @default(ulid())
   tenantId  String
   tenant    Tenant  @relation(fields: [tenantId], references: [id])
   messageId String
