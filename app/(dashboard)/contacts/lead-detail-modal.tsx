@@ -11,6 +11,7 @@ type Detail = {
     id: string;
     name: string | null;
     phone: string;
+    email: string | null;
     businessType: string | null;
     customerStatus: { id: string; name: string } | null;
     leadStage: { id: string; name: string } | null;
@@ -90,6 +91,10 @@ export default function LeadDetailModal({
           </div>
 
           <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <div className="text-stone-500">Email</div>
+              <div className="text-stone-900 mt-0.5">{data.contact.email ?? "—"}</div>
+            </div>
             <div>
               <div className="text-stone-500">Business type</div>
               <div className="text-stone-900 mt-0.5">

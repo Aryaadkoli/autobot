@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Mascot from "@/components/mascot";
 import { STAGES } from "./stages";
 import StageBadge from "./stage-badge";
 import LeadModal, { type EditableLead } from "./lead-modal";
@@ -10,6 +9,7 @@ import ImportModal from "./import-modal";
 import TagManagerModal from "./tag-manager-modal";
 import LeadDetailModal from "./lead-detail-modal";
 import TaxonomyManagerModal from "./taxonomy-manager-modal";
+import { PAGE_SIZE } from "./constants";
 
 export type LeadRow = {
   id: string;
@@ -26,8 +26,6 @@ export type LeadRow = {
   createdAt: string;
   tags: { id: string; name: string }[];
 };
-
-const PAGE_SIZE = 30;
 
 type Tag = { id: string; name: string };
 type BusinessType = { id: string; name: string };
@@ -51,6 +49,12 @@ export default function LeadsClient({
   leadStages,
   canManageTaxonomy,
   activeStage,
+  search,
+  businessTypeFilter,
+  customerStatusFilter,
+  leadStageFilter,
+  page,
+  filteredCount,
   totalLeads,
   newLeadsCount,
   openNewOnLoad,
@@ -63,24 +67,26 @@ export default function LeadsClient({
   leadStages: LeadStageOption[];
   canManageTaxonomy: boolean;
   activeStage?: string;
+  search: string;
+  businessTypeFilter: string;
+  customerStatusFilter: string;
+  leadStageFilter: string;
+  page: number;
+  filteredCount: number;
   totalLeads: number;
   newLeadsCount: number;
   openNewOnLoad?: boolean;
   openImportOnLoad?: boolean;
 }) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
-  const [stageFilter, setStageFilter] = useState(activeStage ?? "");
-  const [businessTypeFilter, setBusinessTypeFilter] = useState("");
-  const [customerStatusFilter, setCustomerStatusFilter] = useState("");
-  const [leadStageFilter, setLeadStageFilter] = useState("");
-  const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState(search);
   const [modal, setModal] = useState<ModalState>(() => {
     if (openImportOnLoad) return { type: "import" };
     if (openNewOnLoad) return { type: "add" };
     return null;
   });
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (openImportOnLoad || openNewOnLoad) {
@@ -89,6 +95,16 @@ export default function LeadsClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    // Re-syncs the input when `search` changes for a reason other than our
+    // own debounce commit below (browser back/forward, or the Reset
+    // button) — a real external-state case, not something derivable
+    // during render, since the two are deliberately allowed to diverge
+    // while the debounce timer is pending.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSearchInput(search);
+  }, [search]);
+
   function refresh() {
     router.refresh();
   }
@@ -96,6 +112,58 @@ export default function LeadsClient({
   function closeAndRefresh() {
     setModal(null);
     refresh();
+  }
+
+  function navigate(next: {
+    search?: string;
+    stage?: string;
+    businessType?: string;
+    customerStatus?: string;
+    leadStage?: string;
+    page?: number;
+  }) {
+    const params = new URLSearchParams();
+    const merged = {
+      search: next.search ?? search,
+      stage: next.stage ?? activeStage ?? "",
+      businessType: next.businessType ?? businessTypeFilter,
+      customerStatus: next.customerStatus ?? customerStatusFilter,
+      leadStage: next.leadStage ?? leadStageFilter,
+      page: next.page ?? page,
+    };
+    if (merged.search) params.set("q", merged.search);
+    if (merged.stage) params.set("stage", merged.stage);
+    if (merged.businessType) params.set("businessType", merged.businessType);
+    if (merged.customerStatus) params.set("customerStatus", merged.customerStatus);
+    if (merged.leadStage) params.set("leadStage", merged.leadStage);
+    if (merged.page > 1) params.set("page", String(merged.page));
+    router.push(`/contacts${params.toString() ? `?${params.toString()}` : ""}`);
+  }
+
+  // Any filter change starts over from page 1 — the old page number means
+  // something different once the result set itself has changed.
+  function updateFilter(patch: Parameters<typeof navigate>[0]) {
+    navigate({ ...patch, page: 1 });
+  }
+
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function handleSearchChange(value: string) {
+    setSearchInput(value);
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => updateFilter({ search: value }), 400);
+  }
+
+  const pageCount = Math.max(1, Math.ceil(filteredCount / PAGE_SIZE));
+  const rangeStart = filteredCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, filteredCount);
+
+  const hasActiveFilters = Boolean(
+    search || activeStage || businessTypeFilter || customerStatusFilter || leadStageFilter
+  );
+
+  function resetFilters() {
+    setSearchInput("");
+    navigate({ search: "", stage: "", businessType: "", customerStatus: "", leadStage: "", page: 1 });
   }
 
   async function handleDelete(lead: LeadRow) {
@@ -116,46 +184,30 @@ export default function LeadsClient({
     }
   }
 
-  const hasActiveFilters = Boolean(
-    search.trim() || stageFilter || businessTypeFilter || customerStatusFilter || leadStageFilter
-  );
-
-  function resetFilters() {
-    setSearch("");
-    setStageFilter("");
-    setBusinessTypeFilter("");
-    setCustomerStatusFilter("");
-    setLeadStageFilter("");
-    setPage(1);
-  }
-
-  const filtered = leads.filter((l) => {
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      if (
-        !(
-          (l.name ?? "").toLowerCase().includes(q) ||
-          l.phone.toLowerCase().includes(q) ||
-          (l.email ?? "").toLowerCase().includes(q)
-        )
-      ) {
-        return false;
-      }
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set("q", search);
+      if (activeStage) params.set("stage", activeStage);
+      if (businessTypeFilter) params.set("businessType", businessTypeFilter);
+      if (customerStatusFilter) params.set("customerStatus", customerStatusFilter);
+      if (leadStageFilter) params.set("leadStage", leadStageFilter);
+      const res = await fetch(`/api/contacts/export${params.toString() ? `?${params.toString()}` : ""}`);
+      if (!res.ok) throw new Error("Could not export leads");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "leads-export.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not export leads");
+    } finally {
+      setExporting(false);
     }
-    if (stageFilter && l.stage !== stageFilter) return false;
-    if (businessTypeFilter && l.businessType !== businessTypeFilter) return false;
-    if (customerStatusFilter && l.customerStatus?.id !== customerStatusFilter) return false;
-    if (leadStageFilter && l.leadStage?.id !== leadStageFilter) return false;
-    return true;
-  });
-
-  // Derived during render rather than reset via an effect: clamping here
-  // means loosening/tightening a filter can never leave `page` pointing
-  // past the end of the now-different result set, without needing to
-  // watch every filter as a dependency just to reset one piece of state.
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  }
 
   function toEditable(lead: LeadRow): EditableLead {
     return {
@@ -173,32 +225,21 @@ export default function LeadsClient({
 
   return (
     <div>
-      <div className="relative mb-6 overflow-hidden rounded-2xl bg-stone-900 px-8 py-7">
-        <div
-          className="pointer-events-none absolute inset-0 [animation:glow-breathe_6s_ease-in-out_infinite]"
-          style={{
-            background:
-              "radial-gradient(circle at 85% 20%, rgba(251,191,36,0.16), transparent 55%)",
-          }}
-        />
-        <button
-          onClick={() => setModal({ type: "add" })}
-          title="Click to add a lead"
-          className="absolute -right-2 -top-4 opacity-90 cursor-pointer transition-transform hover:scale-105"
-        >
-          <Mascot />
-        </button>
-        <div className="relative max-w-[60%]">
-          <h1 className="text-xl font-medium text-white">
-            {newLeadsCount > 0
-              ? `${newLeadsCount} new lead${newLeadsCount === 1 ? "" : "s"} waiting for a first touch`
-              : "All leads have been contacted — nice work"}
-          </h1>
-          <p className="mt-1.5 text-sm text-stone-400">
-            {totalLeads} lead{totalLeads === 1 ? "" : "s"} total. Add, import,
-            and follow up — all from right here.
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-2xl font-semibold text-stone-900">Leads</h1>
+          <p className="text-sm text-stone-500 mt-0.5">
+            {totalLeads.toLocaleString("en-IN")} lead{totalLeads === 1 ? "" : "s"} total
+            {newLeadsCount > 0 ? ` · ${newLeadsCount.toLocaleString("en-IN")} new` : ""}
           </p>
         </div>
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="rounded-lg border border-stone-300 text-stone-700 text-sm px-3 py-1.5 hover:bg-stone-100 cursor-pointer disabled:opacity-50 shrink-0"
+        >
+          {exporting ? "Preparing…" : "Download all leads"}
+        </button>
       </div>
 
       {/* Centered search — the primary way to find a lead */}
@@ -217,9 +258,9 @@ export default function LeadsClient({
             <path d="m21 21-4.3-4.3" />
           </svg>
           <input
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Search by name or phone…"
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Search by name, phone, or email…"
             className="w-full rounded-full border border-stone-300 bg-white pl-10 pr-4 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           />
         </div>
@@ -228,8 +269,8 @@ export default function LeadsClient({
       {/* Field filters + reset */}
       <div className="flex flex-wrap items-center justify-center gap-2 mb-5">
         <select
-          value={stageFilter}
-          onChange={(e) => { setStageFilter(e.target.value); setPage(1); }}
+          value={activeStage ?? ""}
+          onChange={(e) => updateFilter({ stage: e.target.value })}
           className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
         >
           <option value="">All stages</option>
@@ -243,7 +284,7 @@ export default function LeadsClient({
         {businessTypes.length > 0 && (
           <select
             value={businessTypeFilter}
-            onChange={(e) => { setBusinessTypeFilter(e.target.value); setPage(1); }}
+            onChange={(e) => updateFilter({ businessType: e.target.value })}
             className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           >
             <option value="">All business types</option>
@@ -258,7 +299,7 @@ export default function LeadsClient({
         {customerStatuses.length > 0 && (
           <select
             value={customerStatusFilter}
-            onChange={(e) => { setCustomerStatusFilter(e.target.value); setPage(1); }}
+            onChange={(e) => updateFilter({ customerStatus: e.target.value })}
             className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           >
             <option value="">All customer statuses</option>
@@ -273,7 +314,7 @@ export default function LeadsClient({
         {leadStages.length > 0 && (
           <select
             value={leadStageFilter}
-            onChange={(e) => { setLeadStageFilter(e.target.value); setPage(1); }}
+            onChange={(e) => updateFilter({ leadStage: e.target.value })}
             className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
           >
             <option value="">All lead stages</option>
@@ -324,26 +365,22 @@ export default function LeadsClient({
         </button>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-stone-200 p-10 text-center max-w-2xl">
+      {leads.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-stone-200 p-10 text-center max-w-2xl mx-auto">
           <p className="text-stone-700 font-medium">No leads found</p>
           <p className="text-sm text-stone-500 mt-1">
-            {search
-              ? "Try a different search."
-              : activeStage
-                ? "No leads match this stage."
-                : "Add a lead or import a file to get started."}
+            {hasActiveFilters
+              ? "Try a different search or filter."
+              : "Add a lead or import a file to get started."}
           </p>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[1400px]">
+          <table className="w-full text-sm min-w-[1100px]">
             <thead>
               <tr className="text-left text-stone-500 border-b border-stone-200">
                 <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Phone</th>
-                <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Business type</th>
                 <th className="px-4 py-3 font-medium">City / Region</th>
                 <th className="px-4 py-3 font-medium">Product</th>
@@ -356,18 +393,15 @@ export default function LeadsClient({
               </tr>
             </thead>
             <tbody>
-              {paginated.map((lead) => (
-                <tr key={lead.id} className="border-b border-stone-100 last:border-0">
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => setModal({ type: "view", leadId: lead.id })}
-                      className="text-stone-900 hover:text-amber-600 hover:underline cursor-pointer"
-                    >
-                      {lead.name ?? "—"}
-                    </button>
+              {leads.map((lead) => (
+                <tr
+                  key={lead.id}
+                  onClick={() => setModal({ type: "view", leadId: lead.id })}
+                  className="border-b border-stone-100 last:border-0 cursor-pointer hover:bg-stone-50"
+                >
+                  <td className="px-4 py-3 text-stone-900 hover:text-amber-600">
+                    {lead.name ?? "—"}
                   </td>
-                  <td className="px-4 py-3 text-stone-600">{lead.phone}</td>
-                  <td className="px-4 py-3 text-stone-600">{lead.email ?? "—"}</td>
                   <td className="px-4 py-3 text-stone-600">
                     {lead.businessType ?? "—"}
                   </td>
@@ -403,7 +437,7 @@ export default function LeadsClient({
                       year: "numeric",
                     })}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-3">
                       <button
                         onClick={() => setModal({ type: "edit", lead })}
@@ -426,33 +460,31 @@ export default function LeadsClient({
           </table>
           </div>
 
-          {pageCount > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-stone-200 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-stone-200 text-sm">
+            <span className="text-stone-500">
+              Showing {rangeStart.toLocaleString("en-IN")}–{rangeEnd.toLocaleString("en-IN")} of{" "}
+              {filteredCount.toLocaleString("en-IN")} lead{filteredCount === 1 ? "" : "s"}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate({ page: page - 1 })}
+                disabled={page <= 1}
+                className="rounded-lg border border-stone-300 px-3 py-1.5 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-default cursor-pointer"
+              >
+                Previous
+              </button>
               <span className="text-stone-500">
-                Showing {(currentPage - 1) * PAGE_SIZE + 1}–
-                {Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+                Page {page} of {pageCount}
               </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="rounded-lg border border-stone-300 px-3 py-1.5 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-default cursor-pointer"
-                >
-                  Previous
-                </button>
-                <span className="text-stone-500">
-                  Page {currentPage} of {pageCount}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                  disabled={currentPage === pageCount}
-                  className="rounded-lg border border-stone-300 px-3 py-1.5 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-default cursor-pointer"
-                >
-                  Next
-                </button>
-              </div>
+              <button
+                onClick={() => navigate({ page: page + 1 })}
+                disabled={page >= pageCount}
+                className="rounded-lg border border-stone-300 px-3 py-1.5 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-default cursor-pointer"
+              >
+                Next
+              </button>
             </div>
-          )}
+          </div>
         </div>
       )}
 

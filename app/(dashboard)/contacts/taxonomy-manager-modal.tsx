@@ -84,14 +84,14 @@ export default function TaxonomyManagerModal({
   }
 
   async function deleteStatus(id: string, name: string) {
-    if (!confirm(`Delete "${name}" and all its stages? This can't be undone — blocked if any lead is currently set to it.`)) {
+    if (!confirm(`Delete "${name}" and all its stages? This can't be undone. It will be blocked if any lead is currently set to it.`)) {
       return;
     }
     await run(() => fetch(`/api/customer-statuses/${id}`, { method: "DELETE" }));
   }
 
   async function deleteStage(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? This can't be undone — blocked if any lead is currently set to it.`)) {
+    if (!confirm(`Delete "${name}"? This can't be undone. It will be blocked if any lead is currently set to it.`)) {
       return;
     }
     await run(() => fetch(`/api/lead-stages/${id}`, { method: "DELETE" }));
@@ -102,7 +102,7 @@ export default function TaxonomyManagerModal({
       <p className="text-sm text-stone-500 mb-4">
         Each status is a track (e.g. Acquisition, Retention) made up of ordered stages. Only
         owners and co-owners can change this. A status or stage can&apos;t be removed while any
-        lead is still set to it — reassign those leads first.
+        lead is still set to it. Reassign those leads first.
       </p>
 
       {error && (

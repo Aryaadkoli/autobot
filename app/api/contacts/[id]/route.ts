@@ -53,6 +53,7 @@ export async function GET(
       id: contact.id,
       name: contact.name,
       phone: contact.phone,
+      email: contact.email,
       businessType: contact.businessType?.name ?? null,
       customerStatus: contact.customerStatus
         ? { id: contact.customerStatus.id, name: contact.customerStatus.name }
