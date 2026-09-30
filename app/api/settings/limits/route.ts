@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { isOwnerTier } from "@/lib/permissions";
 
 const BodySchema = z.object({
+  sendingLimitsEnabled: z.boolean(),
   dailyCapPerContact: z.coerce.number().int().min(1).max(50),
   quietHoursStart: z.coerce.number().int().min(0).max(23),
   quietHoursEnd: z.coerce.number().int().min(0).max(23),
@@ -32,7 +33,7 @@ export async function PATCH(req: Request) {
   const tenant = await prisma.tenant.update({
     where: { id: session.tenantId },
     data: parsed.data,
-    select: { dailyCapPerContact: true, quietHoursStart: true, quietHoursEnd: true },
+    select: { sendingLimitsEnabled: true, dailyCapPerContact: true, quietHoursStart: true, quietHoursEnd: true },
   });
 
   return Response.json(tenant);

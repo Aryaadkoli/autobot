@@ -28,6 +28,7 @@ export default async function SettingsPage() {
       where: { id: session.tenantId },
       select: {
         timezone: true,
+        sendingLimitsEnabled: true,
         dailyCapPerContact: true,
         quietHoursStart: true,
         quietHoursEnd: true,
@@ -48,6 +49,7 @@ export default async function SettingsPage() {
           <SendingLimits
             canEdit={ownerTier}
             timezone={tenant.timezone}
+            sendingLimitsEnabled={tenant.sendingLimitsEnabled}
             dailyCapPerContact={tenant.dailyCapPerContact}
             quietHoursStart={tenant.quietHoursStart}
             quietHoursEnd={tenant.quietHoursEnd}

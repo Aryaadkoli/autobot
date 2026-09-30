@@ -27,25 +27,27 @@ export async function canSend({
     return { decision: "SUPPRESS", reason: "Opted out" };
   }
 
-  const localHour = currentHourInTimezone(tenant.timezone);
-  if (isWithinQuietHours(localHour, tenant.quietHoursStart, tenant.quietHoursEnd)) {
-    return {
-      decision: "DEFER",
-      until: nextQuietHoursEnd(tenant, localHour),
-      reason: `Quiet hours (${tenant.timezone})`,
-    };
-  }
+  if (tenant.sendingLimitsEnabled) {
+    const localHour = currentHourInTimezone(tenant.timezone);
+    if (isWithinQuietHours(localHour, tenant.quietHoursStart, tenant.quietHoursEnd)) {
+      return {
+        decision: "DEFER",
+        until: nextQuietHoursEnd(tenant, localHour),
+        reason: `Quiet hours (${tenant.timezone})`,
+      };
+    }
 
-  const since = hoursAgo(24);
-  const recentCount = await prisma.message.count({
-    where: { contactId: contact.id, createdAt: { gte: since }, status: { not: "FAILED" } },
-  });
-  if (recentCount >= tenant.dailyCapPerContact) {
-    return {
-      decision: "DEFER",
-      until: new Date(Date.now() + 60 * 60 * 1000), // retry in an hour
-      reason: `Daily cap reached (${tenant.dailyCapPerContact}/24h)`,
-    };
+    const since = hoursAgo(24);
+    const recentCount = await prisma.message.count({
+      where: { contactId: contact.id, createdAt: { gte: since }, status: { not: "FAILED" } },
+    });
+    if (recentCount >= tenant.dailyCapPerContact) {
+      return {
+        decision: "DEFER",
+        until: new Date(Date.now() + 60 * 60 * 1000), // retry in an hour
+        reason: `Daily cap reached (${tenant.dailyCapPerContact}/24h)`,
+      };
+    }
   }
 
   if (workflowId) {

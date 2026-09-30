@@ -32,27 +32,29 @@ export async function sendTemplateToContact({
     return { status: "skipped", reason: "No email on file" };
   }
 
-  const localHour = currentHourInTimezone(tenant.timezone);
-  if (isWithinQuietHours(localHour, tenant.quietHoursStart, tenant.quietHoursEnd)) {
-    return {
-      status: "skipped",
-      reason: `Quiet hours (no sends ${String(tenant.quietHoursStart).padStart(2, "0")}:00–${String(tenant.quietHoursEnd).padStart(2, "0")}:00 ${tenant.timezone})`,
-    };
-  }
+  if (tenant.sendingLimitsEnabled) {
+    const localHour = currentHourInTimezone(tenant.timezone);
+    if (isWithinQuietHours(localHour, tenant.quietHoursStart, tenant.quietHoursEnd)) {
+      return {
+        status: "skipped",
+        reason: `Quiet hours (no sends ${String(tenant.quietHoursStart).padStart(2, "0")}:00–${String(tenant.quietHoursEnd).padStart(2, "0")}:00 ${tenant.timezone})`,
+      };
+    }
 
-  const since = hoursAgo(24);
-  const recentCount = await prisma.message.count({
-    where: {
-      contactId: contact.id,
-      createdAt: { gte: since },
-      status: { not: "FAILED" },
-    },
-  });
-  if (recentCount >= tenant.dailyCapPerContact) {
-    return {
-      status: "skipped",
-      reason: `Daily cap reached (${tenant.dailyCapPerContact} messages/24h)`,
-    };
+    const since = hoursAgo(24);
+    const recentCount = await prisma.message.count({
+      where: {
+        contactId: contact.id,
+        createdAt: { gte: since },
+        status: { not: "FAILED" },
+      },
+    });
+    if (recentCount >= tenant.dailyCapPerContact) {
+      return {
+        status: "skipped",
+        reason: `Daily cap reached (${tenant.dailyCapPerContact} messages/24h)`,
+      };
+    }
   }
 
   const { renderedBody, result, adapterName } = await renderAndSend(template, tenant, contact);
