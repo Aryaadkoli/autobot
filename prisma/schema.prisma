@@ -70,9 +70,27 @@ model Account {
   email        String   @unique
   passwordHash String
   name         String
+  phone        String? // optional — account profile info, not used for login/2FA
   createdAt    DateTime @default(now())
 
   memberships User[]
+  resetTokens PasswordResetToken[]
+}
+
+// "Forgot password" — the emailed link carries the raw token; only its
+// SHA-256 hash is ever stored, so a database leak alone can't be used to
+// reset anyone's password. One-time use (usedAt) and short-lived
+// (expiresAt) — see lib/password-reset.ts.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  accountId String
+  account   Account   @relation(fields: [accountId], references: [id])
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([accountId])
 }
 
 // One person's membership in one Tenant — the role they hold there. All
