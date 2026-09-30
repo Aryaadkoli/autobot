@@ -9,9 +9,9 @@
 // "content" in the sense leads/templates/messages are, so a "blank slate"
 // here means an empty CRM ready for real data, not a broken app.
 //
-// Deleted, in dependency order: Message, Event, SequenceInstance,
+// Deleted, in dependency order: Link, Message, Event, SequenceInstance,
 // ScheduledCampaign, Campaign, ContactTag, TagRule, Tag, Import, Contact,
-// MessageTemplate, Workflow, Link, ApiKey.
+// MessageTemplate, Workflow, ApiKey, PasswordResetToken.
 //
 // This is IRREVERSIBLE. Take a real backup first (deploy/backup.sh) —
 // this script does not create one for you.
@@ -37,6 +37,9 @@ async function main() {
 
   const counts: Record<string, number> = {};
 
+  // Link references Message — must go first, or deleting a Message that
+  // still has a tracked link would violate the foreign key.
+  counts.Link = (await prisma.link.deleteMany({})).count;
   counts.Message = (await prisma.message.deleteMany({})).count;
   counts.Event = (await prisma.event.deleteMany({})).count;
   counts.SequenceInstance = (await prisma.sequenceInstance.deleteMany({})).count;
@@ -49,8 +52,8 @@ async function main() {
   counts.Contact = (await prisma.contact.deleteMany({})).count;
   counts.MessageTemplate = (await prisma.messageTemplate.deleteMany({})).count;
   counts.Workflow = (await prisma.workflow.deleteMany({})).count;
-  counts.Link = (await prisma.link.deleteMany({})).count;
   counts.ApiKey = (await prisma.apiKey.deleteMany({})).count;
+  counts.PasswordResetToken = (await prisma.passwordResetToken.deleteMany({})).count;
 
   console.log("Deleted row counts:", counts);
   console.log(
