@@ -41,10 +41,10 @@ export default async function WorkflowsPage() {
     <div>
       <h1 className="text-2xl font-semibold text-stone-900 mb-2">Workflows</h1>
       <p className="text-sm text-stone-500 mb-6 max-w-2xl">
-        Multi-step follow-up plans that react to what a lead does — reply,
-        click, or stay silent — not just a calendar date. For the
-        date-driven case (&ldquo;send X every January&rdquo;), Campaigns
-        already covers that; Workflows is for sequences that branch.
+        Build a follow-up plan that responds to what a lead actually does,
+        whether they reply, click a link, or say nothing at all. If you just
+        want something sent on a set date, use Campaigns instead. Workflows
+        is for the plans that branch depending on what happens.
       </p>
       <WorkflowsClient
         workflows={workflows.map((w) => ({

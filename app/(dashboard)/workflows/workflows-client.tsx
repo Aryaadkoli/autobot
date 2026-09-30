@@ -91,7 +91,7 @@ export default function WorkflowsClient({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <button
           onClick={() => setShowExample((s) => !s)}
           className="text-xs text-amber-700 hover:underline cursor-pointer"
@@ -191,10 +191,28 @@ export default function WorkflowsClient({
                       {w.status === "ACTIVE" && (
                         <button
                           disabled={busyId === w.id}
+                          onClick={() => setStatus(w, "DRAFT")}
+                          className="text-xs text-stone-500 hover:text-stone-800 cursor-pointer disabled:opacity-50"
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                      {w.status === "ACTIVE" && (
+                        <button
+                          disabled={busyId === w.id}
                           onClick={() => setStatus(w, "ARCHIVED")}
                           className="text-xs text-stone-500 hover:text-stone-800 cursor-pointer disabled:opacity-50"
                         >
                           Archive
+                        </button>
+                      )}
+                      {w.status === "ARCHIVED" && (
+                        <button
+                          disabled={busyId === w.id}
+                          onClick={() => setStatus(w, "ACTIVE")}
+                          className="text-xs text-green-700 hover:underline cursor-pointer disabled:opacity-50"
+                        >
+                          Reactivate
                         </button>
                       )}
                       <button
