@@ -14,11 +14,10 @@ function navFor(permissions: PermissionMap) {
     { href: "/workflows", label: "Workflows", show: canView(permissions, "WORKFLOWS") },
     { href: "/campaigns", label: "Campaigns", show: canView(permissions, "CAMPAIGNS") },
     { href: "/analytics", label: "Analytics", show: canView(permissions, "ANALYTICS") },
-    {
-      href: "/settings",
-      label: "Settings",
-      show: canView(permissions, "SETTINGS") || canView(permissions, "TEAM"),
-    },
+    // Always shown — the team hierarchy is visible to everyone now, so
+    // there's always something worth seeing there even without SETTINGS/
+    // TEAM permission.
+    { href: "/settings", label: "Settings", show: true },
   ];
   return items.filter((i) => i.show).map(({ href, label }) => ({ href, label }));
 }
@@ -44,10 +43,19 @@ export default async function DashboardLayout({
   // to clear it (see clear-stale-session/route.ts) — signOut() itself can
   // only run in a Server Action or Route Handler, never during a Server
   // Component's render, so it can't be called directly here.
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: account.tenantId },
-    select: { name: true },
-  });
+  const [tenant, accountDetails] = await Promise.all([
+    prisma.tenant.findUnique({
+      where: { id: account.tenantId },
+      select: { name: true },
+    }),
+    // Phone/createdAt aren't cached in the JWT (unlike name/email/role) —
+    // fetched fresh here so an edit in the Account modal shows up on the
+    // very next render, no re-login needed.
+    prisma.account.findUnique({
+      where: { id: account.accountId },
+      select: { phone: true, createdAt: true },
+    }),
+  ]);
 
   if (!tenant) {
     redirect("/api/auth/clear-stale-session");
@@ -64,7 +72,10 @@ export default async function DashboardLayout({
         tenantName={tenant.name}
         userName={account.name}
         userEmail={account.email}
+        userPhone={accountDetails?.phone ?? null}
+        memberSince={accountDetails?.createdAt.toISOString() ?? null}
         userRole={account.role ?? ""}
+        memberships={account.memberships.map((m) => ({ tenantName: m.tenantName, role: m.role }))}
         canSwitchTenant={account.memberships.length > 1}
         nav={navFor(account.permissions)}
         logoutAction={logout}

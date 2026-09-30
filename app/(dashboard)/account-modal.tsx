@@ -1,28 +1,40 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Modal from "@/components/modal";
 
 export default function AccountModal({
   tenantName,
   userName,
   userEmail,
+  userPhone,
+  memberSince,
   userRole,
+  memberships,
   onClose,
 }: {
   tenantName: string;
   userName: string;
   userEmail: string;
+  userPhone: string | null;
+  memberSince: string | null;
   userRole: string;
+  memberships: { tenantName: string; role: string }[];
   onClose: () => void;
 }) {
+  const router = useRouter();
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState(userPhone ?? "");
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -47,37 +59,110 @@ export default function AccountModal({
     }
   }
 
-  const fields = [
-    { label: "Name", value: userName || "—" },
-    { label: "Email", value: userEmail || "—" },
-    { label: "Role", value: userRole || "—" },
-    { label: "Business", value: tenantName || "—" },
-  ];
+  async function handleSavePhone() {
+    setSavingPhone(true);
+    setPhoneError(null);
+    try {
+      const res = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phoneInput.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not save phone number");
+      setEditingPhone(false);
+      router.refresh();
+    } catch (err) {
+      setPhoneError(err instanceof Error ? err.message : "Could not save phone number");
+    } finally {
+      setSavingPhone(false);
+    }
+  }
+
+  const otherMemberships = memberships.filter(
+    (m) => !(m.tenantName === tenantName && m.role === userRole)
+  );
 
   return (
     <Modal title="Account" onClose={onClose}>
-      <div className="space-y-4">
-        {fields.map((f) => (
-          <div key={f.label}>
-            <div className="text-xs text-stone-500">{f.label}</div>
-            <div className="text-sm text-stone-900 mt-0.5">{f.value}</div>
-          </div>
-        ))}
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-xl font-semibold text-stone-900">{userName || "—"}</h3>
+          <p className="text-sm text-stone-500 mt-0.5">{userEmail || "—"}</p>
+        </div>
+        {userRole && (
+          <span className="text-[10px] uppercase tracking-wide text-stone-700 bg-stone-100 border border-stone-200 rounded-full px-2 py-0.5">
+            {userRole}
+          </span>
+        )}
       </div>
 
-      {(userRole === "OWNER" || userRole === "CO_OWNER") && (
-        <Link
-          href="/settings"
-          onClick={onClose}
-          className="mt-6 block rounded-lg border border-stone-200 px-3 py-2.5 hover:bg-stone-50"
-        >
-          <div className="text-sm text-stone-900 font-medium">
-            Manage team
+      <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <div className="text-stone-500">Business</div>
+          <div className="text-stone-900 mt-0.5">{tenantName || "—"}</div>
+        </div>
+        <div>
+          <div className="text-stone-500">Member since</div>
+          <div className="text-stone-900 mt-0.5">
+            {memberSince
+              ? new Date(memberSince).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "—"}
           </div>
-          <div className="text-xs text-stone-500 mt-0.5">
-            Add or remove teammates who can log in
+        </div>
+        <div>
+          <div className="text-stone-500">Phone</div>
+          {editingPhone ? (
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                autoFocus
+                value={phoneInput}
+                onChange={(e) => setPhoneInput(e.target.value)}
+                placeholder="Add a phone number"
+                className="flex-1 rounded-lg border border-stone-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+              <button
+                onClick={handleSavePhone}
+                disabled={savingPhone}
+                className="text-xs text-stone-700 hover:text-stone-900 cursor-pointer disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                setPhoneInput(userPhone ?? "");
+                setEditingPhone(true);
+              }}
+              className="block text-stone-900 mt-0.5 hover:text-amber-600 cursor-pointer text-left"
+            >
+              {userPhone || <span className="text-stone-400">Add a phone number</span>}
+            </button>
+          )}
+          {phoneError && <p className="text-xs text-red-600 mt-1">{phoneError}</p>}
+        </div>
+      </div>
+
+      {otherMemberships.length > 0 && (
+        <div className="mt-5">
+          <div className="text-sm text-stone-500 mb-1.5">Also a member of</div>
+          <div className="space-y-1">
+            {otherMemberships.map((m) => (
+              <div
+                key={m.tenantName}
+                className="flex items-center justify-between text-sm bg-stone-50 border border-stone-100 rounded-lg px-3 py-1.5"
+              >
+                <span className="text-stone-900">{m.tenantName}</span>
+                <span className="text-[10px] uppercase tracking-wide text-stone-500">{m.role}</span>
+              </div>
+            ))}
           </div>
-        </Link>
+        </div>
       )}
 
       <div className="mt-6 pt-5 border-t border-stone-200">
@@ -149,9 +234,6 @@ export default function AccountModal({
             </div>
           </form>
         )}
-        <p className="text-xs text-stone-400 mt-4">
-          Notification preferences are coming soon.
-        </p>
       </div>
 
       <button
