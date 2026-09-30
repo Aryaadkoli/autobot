@@ -1,13 +1,21 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useTheme } from "@/lib/use-theme";
 
-// Global floating toggle (rendered once in app/layout.tsx) so it's on
-// every page, including login/signup which have no sidebar to hold
-// theme-switch.tsx's labeled version.
+// Only the handful of standalone pages with no sidebar need this floating
+// version — everywhere else, the sidebar's own theme-switch.tsx (labeled
+// "Dark mode") is the one and only toggle. Without this allowlist, the
+// floating button renders on every page (it's mounted once in
+// app/layout.tsx) and visually collides with the sidebar's own
+// account/sign-out row, which sits at the same bottom-left corner.
+const NO_SIDEBAR_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/select-tenant"];
+
 export default function ThemeToggle() {
+  const pathname = usePathname();
   const [theme, toggle] = useTheme();
   if (theme === null) return null;
+  if (!NO_SIDEBAR_PATHS.includes(pathname)) return null;
 
   return (
     <button
