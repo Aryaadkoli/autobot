@@ -376,7 +376,78 @@ export default function LeadsClient({
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Below sm: a stacked card per lead — a table this wide (min-w-[1100px]
+              below) forces horizontal scrolling on a phone, and a row's height
+              is set by its tallest cell even when that cell is scrolled out of
+              view, so a lead with a few tags can leave a tall blank-looking row. */}
+          <div className="sm:hidden divide-y divide-stone-100">
+            {leads.map((lead) => (
+              <div
+                key={lead.id}
+                onClick={() => setModal({ type: "view", leadId: lead.id })}
+                className="p-4 cursor-pointer hover:bg-stone-50"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-stone-900 font-medium">{lead.name ?? "—"}</span>
+                  <StageBadge stage={lead.stage} />
+                </div>
+                <div className="mt-1.5 text-xs text-stone-500 space-y-0.5">
+                  {(lead.businessType || lead.city || lead.region) && (
+                    <p>
+                      {[lead.businessType, [lead.city, lead.region].filter(Boolean).join(" / ")]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
+                  {(lead.customerStatus || lead.leadStage) && (
+                    <p>
+                      {[lead.customerStatus?.name, lead.leadStage?.name].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                  <p>
+                    Added{" "}
+                    {new Date(lead.createdAt).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
+                {lead.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {lead.tags.map((t) => (
+                      <span
+                        key={t.id}
+                        className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 text-xs border border-amber-200"
+                      >
+                        {t.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div
+                  className="flex items-center gap-3 mt-2.5"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => setModal({ type: "edit", lead })}
+                    className="text-xs text-stone-500 hover:text-stone-800 cursor-pointer"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    disabled={deletingId === lead.id}
+                    onClick={() => handleDelete(lead)}
+                    className="text-xs text-red-600 hover:underline cursor-pointer disabled:opacity-50"
+                  >
+                    {deletingId === lead.id ? "Deleting…" : "Delete"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-sm min-w-[1100px]">
             <thead>
               <tr className="text-left text-stone-500 border-b border-stone-200">
