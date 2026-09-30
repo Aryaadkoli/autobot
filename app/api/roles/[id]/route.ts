@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, MODULES } from "@/lib/permissions";
+import { isOwnerTier, MODULES } from "@/lib/permissions";
 import type { Module } from "@prisma/client";
 
 const PermissionsPatchSchema = z.object({
@@ -22,8 +22,10 @@ export async function PATCH(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
-  const denied = requirePermission(session, "TEAM", "edit");
-  if (denied) return denied;
+  // Role permissions are owner/co-owner-only, not governed by the TEAM permission grid.
+  if (!isOwnerTier(session.role)) {
+    return Response.json({ error: "Only the owner or co-owner can manage roles" }, { status: 403 });
+  }
 
   const { id } = await params;
   const role = await prisma.role.findFirst({ where: { id, tenantId: session.tenantId } });
@@ -77,8 +79,9 @@ export async function DELETE(
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
-  const denied = requirePermission(session, "TEAM", "edit");
-  if (denied) return denied;
+  if (!isOwnerTier(session.role)) {
+    return Response.json({ error: "Only the owner or co-owner can manage roles" }, { status: 403 });
+  }
 
   const { id } = await params;
 

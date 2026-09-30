@@ -6,9 +6,9 @@ import { useRouter } from "next/navigation";
 type RoleRow = { id: string; name: string; isSystem: boolean; deleted: boolean; memberCount: number };
 
 const SYSTEM_ROLE_INFO: Record<string, string> = {
-  OWNER: "Full control — the only role that can manage the team, change sending limits, and manage customer statuses & lead stages.",
+  OWNER: "Full control. This is the only role that can manage the team, change sending limits, and manage customer statuses and lead stages.",
   CO_OWNER: "Everything OWNER can do, except it can't remove an OWNER or another CO_OWNER's account.",
-  MEMBER: "Whatever the owner has switched on for it below — starts out able to see (not edit) Leads, Templates, Campaigns, and Workflows.",
+  MEMBER: "Whatever the owner has switched on below. Starts out able to see (not edit) Leads, Templates, Campaigns, and Workflows.",
 };
 
 // One row per module, matching lib/permissions.ts's Module enum.
@@ -105,7 +105,7 @@ export default function RolesReference({ roles, canEdit }: { roles: RoleRow[]; c
         )}
       </div>
       <p className="text-sm text-stone-500 mb-4">
-        What each role can do — check this before assigning one.
+        Check what each role can do before you assign it.
       </p>
 
       {showAdd && (
@@ -202,7 +202,7 @@ export default function RolesReference({ roles, canEdit }: { roles: RoleRow[]; c
             </div>
             <p className="text-sm text-stone-700 mt-2">
               {SYSTEM_ROLE_INFO[r.name] ??
-                "Custom role — access is whatever the owner chose for it when it was created."}
+                "Custom role. Access is whatever the owner chose for it when it was created."}
             </p>
           </div>
         ))}

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Prisma, type Module } from "@prisma/client";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
-import { requirePermission, MODULES } from "@/lib/permissions";
+import { isOwnerTier, MODULES } from "@/lib/permissions";
 import { SYSTEM_ROLE_NAMES } from "@/lib/roles";
 
 const RoleInputSchema = z.object({
@@ -20,8 +20,10 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
-  const denied = requirePermission(session, "TEAM", "edit");
-  if (denied) return denied;
+  // Role creation is owner/co-owner-only, not governed by the TEAM permission grid.
+  if (!isOwnerTier(session.role)) {
+    return Response.json({ error: "Only the owner or co-owner can manage roles" }, { status: 403 });
+  }
 
   const parsed = RoleInputSchema.safeParse(await req.json());
   if (!parsed.success) {

@@ -21,9 +21,7 @@ export async function GET() {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
-  const denied = requirePermission(session, "TEAM", "view");
-  if (denied) return denied;
-
+  // Team membership/hierarchy is visible to anyone on the tenant, not gated by the TEAM permission grid.
   const users = await prisma.user.findMany({
     where: { tenantId: session.tenantId },
     select: { id: true, role: { select: { name: true } }, account: { select: { name: true, email: true } } },

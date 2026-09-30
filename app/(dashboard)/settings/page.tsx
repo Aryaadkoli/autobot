@@ -1,35 +1,29 @@
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
-import { canView, canEdit } from "@/lib/permissions";
+import { canEdit, isOwnerTier } from "@/lib/permissions";
 import SettingsClient from "./settings-client";
 import SendingLimits from "./sending-limits";
 import RolesReference from "./roles-reference";
-import OrganizationsSection from "./organizations-section";
 
 export default async function SettingsPage() {
   const session = await requireSession();
 
-  const seeTeam = canView(session.permissions, "TEAM");
+  // Sending limits and roles are owner/co-owner-only; the team list/hierarchy
+  // is visible to everyone on the tenant (only edit actions stay gated).
+  const ownerTier = isOwnerTier(session.role);
   const editTeam = canEdit(session.permissions, "TEAM");
-  const seeSettings = canView(session.permissions, "SETTINGS");
-  const editSettings = canEdit(session.permissions, "SETTINGS");
 
   const [membershipRows, roleRows, tenant] = await Promise.all([
-    // Skip the query entirely for someone who won't be shown the team section.
-    seeTeam
-      ? prisma.user.findMany({
-          where: { tenantId: session.tenantId },
-          select: { id: true, role: { select: { id: true, name: true } }, account: { select: { name: true, email: true } } },
-          orderBy: { account: { name: "asc" } },
-        })
-      : Promise.resolve([]),
-    seeTeam
-      ? prisma.role.findMany({
-          where: { tenantId: session.tenantId },
-          select: { id: true, name: true, isSystem: true, deletedAt: true, _count: { select: { users: true } } },
-          orderBy: [{ isSystem: "desc" }, { name: "asc" }],
-        })
-      : Promise.resolve([]),
+    prisma.user.findMany({
+      where: { tenantId: session.tenantId },
+      select: { id: true, role: { select: { id: true, name: true } }, account: { select: { name: true, email: true } } },
+      orderBy: { account: { name: "asc" } },
+    }),
+    prisma.role.findMany({
+      where: { tenantId: session.tenantId },
+      select: { id: true, name: true, isSystem: true, deletedAt: true, _count: { select: { users: true } } },
+      orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+    }),
     prisma.tenant.findUniqueOrThrow({
       where: { id: session.tenantId },
       select: {
@@ -41,36 +35,18 @@ export default async function SettingsPage() {
     }),
   ]);
 
-  // Organizations is always shown (open to everyone regardless of role
-  // or module permission — see organizations-section.tsx), so this only
-  // needs to flag when the *other* sections (limits, Team) are both
-  // hidden, not the whole page.
-  const restOfPageHidden = !seeSettings && !seeTeam;
-
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
-          Settings
-        </h1>
-        {/* A lightweight option next to the title, not a whole section —
-            creating an org is rare enough that it shouldn't compete with
-            the settings people actually use every day. */}
-        <OrganizationsSection />
-      </div>
-
-      {restOfPageHidden && (
-        <p className="text-sm text-stone-500 bg-white rounded-2xl border border-stone-200 p-6 max-w-2xl mb-6">
-          You don&apos;t have access to sending limits or team settings. Ask the account owner if you need something changed here.
-        </p>
-      )}
+      <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100 mb-6">
+        Settings
+      </h1>
 
       {/* Side by side on wide screens so nothing needs its own scroll —
           each section fills its grid cell instead of capping its own width. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {seeSettings && (
+        {ownerTier && (
           <SendingLimits
-            canEdit={editSettings}
+            canEdit={ownerTier}
             timezone={tenant.timezone}
             dailyCapPerContact={tenant.dailyCapPerContact}
             quietHoursStart={tenant.quietHoursStart}
@@ -78,7 +54,7 @@ export default async function SettingsPage() {
           />
         )}
 
-        {seeTeam && (
+        <div className={ownerTier ? "" : "lg:col-span-2"}>
           <SettingsClient
             canEdit={editTeam}
             users={membershipRows.map((u) => ({
@@ -93,11 +69,11 @@ export default async function SettingsPage() {
             currentUserId={session.userId}
             currentUserRole={session.role}
           />
-        )}
+        </div>
 
-        {seeTeam && (
+        {ownerTier && (
           <RolesReference
-            canEdit={editTeam}
+            canEdit={ownerTier}
             roles={roleRows.map((r) => ({
               id: r.id,
               name: r.name,

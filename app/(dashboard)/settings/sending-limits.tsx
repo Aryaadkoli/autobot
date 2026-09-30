@@ -61,8 +61,9 @@ export default function SendingLimits({
     <div className="bg-white rounded-2xl border border-stone-200 p-6 h-full">
       <h2 className="text-sm font-medium text-stone-700">Sending limits</h2>
       <p className="text-sm text-stone-500 mt-1">
-        Applied to every send automatically — Campaigns, Scheduled
-        Campaigns and test sends all respect these.
+        These apply automatically to every real send, both Campaigns and
+        Scheduled Campaigns. Test messages always go to a fixed preview
+        number and are not affected.
       </p>
 
       {!editing ? (
