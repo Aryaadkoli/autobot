@@ -5,39 +5,43 @@ commands you'll actually use afterward (deploying an update, checking
 logs, backing up, restoring). The Docker Compose setup this repo is
 built around (see `docs/BLUEPRINT.md` for why) is cloud-agnostic — it
 runs identically on any Ubuntu VM with a public IP and ports 80/443
-open. Originally planned for Oracle Cloud; switched to **Google Cloud's
-free tier (e2-micro)** when Oracle's signup got stuck. Nothing below
-Part 1, Step 1 changes based on that choice.
+open. **Autobot is actually running on AWS** (a `t3.micro` in
+`ap-south-1`/Mumbai, Elastic IP `13.127.38.161`, under the new-account
+$200/6-month credit — that credit ends ~March 2, 2027, revisit hosting
+then). Oracle Cloud's signup never cleared a fraud check and GCP's
+Always-Free tier has no India region, so AWS ended up the practical
+choice — see CLAUDE.md for the full story. Nothing below Part 1, Step 1
+changes based on that choice; only the console steps for creating the
+VM differ by provider.
 
 ## Part 1 — one-time setup
 
 ### 1. Create the VM
 
-Using Google Cloud's free tier:
+Using an AWS EC2 free/credit-eligible instance:
 
-1. Sign up / log into [Google Cloud Console](https://console.cloud.google.com).
-2. **Compute Engine → VM instances → Create Instance**
-3. **Region**: must be one of the three Always Free regions —
-   `us-west1` (Oregon), `us-central1` (Iowa), or `us-east1` (South
-   Carolina). Any other region bills real money for the same instance
-   — this is the one setting that matters most for staying free. Pick
-   whichever shows as available.
-4. **Machine type**: `e2-micro` — specifically this one. Anything
-   larger is outside the free tier.
-5. **Boot disk**: Ubuntu 22.04 LTS, **Standard persistent disk** (not
-   SSD — SSD isn't part of the free allowance), up to 30GB.
-6. **Firewall**: tick **Allow HTTP traffic** and **Allow HTTPS
-   traffic** — this is GCP's equivalent of Oracle's Security List, a
-   separate cloud-level firewall in front of the VM. Without this
-   checked, ports 80/443 stay blocked regardless of the VM's own `ufw`.
-7. Create it, wait ~30s, note its **external (public) IP address** —
-   shown right on the VM instances list.
+1. Sign up / log into the [AWS Console](https://console.aws.amazon.com)
+   → **EC2 → Launch instance**.
+2. **Region**: `ap-south-1` (Mumbai) — closest to real users, and
+   there's no Always-Free regional restriction the way GCP has.
+3. **AMI**: Ubuntu Server 24.04 LTS.
+4. **Instance type**: `t3.micro`.
+5. **Credit specification**: set to **Standard**, not Unlimited — this
+   avoids any surprise CPU-burst billing beyond the included credit.
+6. **Storage**: 50GB gp3 EBS.
+7. **Security group**: allow inbound TCP 22 (SSH, ideally locked to
+   your own IP), 80, and 443 from anywhere — this is AWS's equivalent
+   of a cloud-level firewall in front of the VM. Without 80/443 open
+   here, they stay blocked regardless of the VM's own `ufw`.
+8. **Allocate an Elastic IP** and associate it with the instance —
+   a normal EC2 public IP changes if the instance ever stops/starts;
+   an Elastic IP doesn't, so DNS never silently breaks later.
+9. Launch it, note the Elastic IP.
 
-One real constraint worth knowing: the free e2-micro's network egress
-(data leaving the VM) is capped at 1GB/month to most destinations —
-fine for a small business's message volume today, worth watching if
-usage grows a lot (template images fetched by Meta's servers count as
-egress from this VM).
+One real constraint worth knowing: this is running on a **time-limited
+credit**, not a permanent free tier — check the credit's expiry and
+either pay, migrate to Oracle (if its signup ever clears), or migrate
+to GCP before it runs out.
 
 ### 2. Point the domain at it
 
@@ -157,6 +161,37 @@ Run this after `git pull` if the update includes a schema change —
 before or after the container rebuild both work, but do it before
 anyone starts using the new code if the migration changes data shape
 things the app depends on.
+
+### One-time: migrating existing ids to ULID format
+
+Tied to a specific update (schema.prisma's ids moved from `cuid()` to
+`ulid()`, and `Tenant.sendingLimitsEnabled` was added) — this is not a
+step you'll repeat for future deploys. Order matters:
+
+```bash
+git pull
+docker compose --env-file .env up -d --build   # rebuild web/worker with the new code
+docker compose exec web npx prisma migrate deploy   # adds the sendingLimitsEnabled column
+```
+
+Then, once (take a real backup first — `bash deploy/backup.sh` — this
+rewrites every row's primary key and every column that references it,
+inside one transaction; it either fully succeeds or fully rolls back,
+but a backup is still the right call before any structural rewrite):
+
+```bash
+docker compose exec web sh -c 'CONFIRM_ULID_MIGRATION=yes-migrate-ids-to-ulid npx tsx prisma/migrate-ids-to-ulid.ts'
+```
+
+It prints a per-table summary and a final "Integrity check passed" line
+— read the output; if it reports a failure it will have already rolled
+back and changed nothing. Running it twice is safe (already-migrated
+rows are skipped). See `prisma/migrate-ids-to-ulid.ts`'s own comments
+for exactly what it does and why it's a standalone script rather than a
+`prisma migrate` file. Verified against a full local dataset (143
+contacts + every related table) before this was written here — zero
+orphaned references, all counts unchanged, app logins/pages/sends all
+confirmed working against the new ids afterward.
 
 ### View logs
 

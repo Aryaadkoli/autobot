@@ -4,6 +4,35 @@ This file is the permanent context for every coding session. Read it fully
 before doing anything. Deep spec: docs/BLUEPRINT.md. Database source of
 truth: prisma/schema.prisma.
 
+## Working on a new machine
+
+Nothing here is tied to any specific computer or account — this checklist
+is what a fresh clone needs, whether that's Claude Code on a different
+device or a new contributor:
+
+1. **Node 22** — `.nvmrc` pins this (`nvm use` picks it up automatically
+   if nvm is installed); `package.json`'s `engines.node` also declares it.
+2. **PostgreSQL and Redis running locally** — any install method works;
+   `.env.example`'s comments show a one-line `docker run` for Redis if
+   nothing else is set up yet.
+3. `cp .env.example .env`, fill in `DATABASE_URL` for your local Postgres,
+   generate `AUTH_SECRET` (`npx auth secret`) and `CREDENTIALS_KEY`
+   (`openssl rand -base64 32`). Everything else in `.env.example` has a
+   working default or safe placeholder for local dev — Meta/Gmail vars can
+   stay blank (the app falls back to mock channels/console-logged emails).
+4. `npm install`
+5. `npx prisma migrate deploy && npx prisma db seed` — creates the schema
+   and a rich local dev dataset (see **Seeded logins** further down for
+   the accounts this creates).
+6. `npm run dev` — the in-process scheduler and workflow worker both start
+   automatically (instrumentation.ts); no second terminal needed for local
+   dev. `npm run worker` is only for running the worker as its own process
+   (what production does).
+
+No step here should ever require knowing which machine, OS account, or
+absolute path this repo happens to live at — if you find one, fix it
+rather than working around it.
+
 ## Purpose — why this exists
 
 Autobot is a customer-communication automation platform being built for a
@@ -877,11 +906,9 @@ real VM, not caught by any local testing:
     existed here from prior testing. Fixed with `public/.gitkeep`,
     verified against an actual fresh clone before telling the owner to
     retry.
-`docs/RUNBOOK.md`'s VM-creation section still shows GCP's console
-steps in writing (the actual deploy walked through AWS's console live
-instead, successfully, since the underlying Docker/Caddy setup is
-fully cloud-agnostic) — cosmetic gap, worth updating next time this
-file is touched.
+`docs/RUNBOOK.md`'s VM-creation section now describes the real AWS
+console steps (was GCP's, from before the hosting decision landed on
+AWS) — fixed in the same session that added the ULID migration below.
 
 A later same-day session added, verified (clean tsc/lint/build,
 no new migration needed), and confirmed safe to deploy:
@@ -897,6 +924,72 @@ session's merge had real conflicts across auth.ts/lib/accounts.ts/
 lib/permissions.ts (a parallel comment-trimming pass touched the same
 files) — checked the resolution kept both sets of changes correctly
 before calling it safe.
+
+A later session switched every model's primary key from `cuid()` to
+`ulid()` (owner's call, made while there were still only two real
+account logins — the cheapest possible time to do it) and added a
+**sending limits on/off toggle**. Schema-wise the id change is a true
+no-op at the database level (`prisma migrate diff` between the two
+schemas reports an empty migration — `cuid()`/`ulid()` are both just
+client-side id-generation strategies, no column type or DDL changes),
+so it needed no migration file for new rows. Existing rows are a
+different problem: `prisma/migrate-ids-to-ulid.ts` is a standalone
+script (same "manual, gated by a confirm env var" pattern as
+`seed.prod.ts`/`reset-prod-data.ts`) that introspects every real FK
+constraint from Postgres itself (not hardcoded), drops them, generates
+a fresh ULID for every row in every table with a single-column `id`
+PK, remaps every FK column plus three columns that reference another
+table's id WITHOUT a declared Prisma relation
+(`SequenceInstance.pivotedToId`, `Message.instanceId`,
+`ScheduledCampaign.ranCampaignId` — checked directly against
+schema.prisma, not guessed), re-creates the constraints from their
+exact original definitions, and verifies zero orphaned references —
+all inside one transaction, so any failure rolls back completely.
+Confirmed `Workflow.definition`'s JSON never embeds a table id (send
+steps reference a template by `name`, pivot listens reference a
+subflow by `name` too — see core/workflow/schema.ts and engine.ts's
+`pivot()`), so no JSON surgery was needed anywhere.
+A real bug was caught on the first live run against local data: the
+FK/PK introspection query matched Prisma's own internal
+`_prisma_migrations` bookkeeping table too (it also happens to have a
+column literally named "id"), which got its ids rewritten before this
+was noticed. Caught immediately since the full run's output was read
+rather than assumed successful; the local database was restored from a
+`pg_dump` backup taken before the run, the script fixed to exclude
+`_prisma%` tables and to hard-assert its discovered table list matches
+an explicit expected list (so an unexpected table trips a loud failure
+next time instead of silently being touched), then re-run clean.
+Verified for real, not just re-run: a full backup before, a rigorous
+post-migration check walking every relation (Contact→BusinessType/
+CustomerStatus/LeadStage, User→Tenant/Account/Role, ContactTag→Contact/
+Tag, LeadStage→CustomerStatus, Role/Service/Workflow→Tenant — zero
+broken links, exact same row counts as before) rather than trusting the
+script's own "integrity check passed" message alone, then a live
+end-to-end smoke test (real login against the real seeded owner,
+a throwaway test tenant's Leads/Settings pages loading correctly,
+and a direct functional check that a template send is actually skipped
+by quiet hours with the new `Tenant.sendingLimitsEnabled` on and
+actually goes through with it off — not just that the flag saves).
+docs/RUNBOOK.md documents this as a one-time step tied to this specific
+deploy, in the right order relative to `prisma migrate deploy`.
+Sending-limits toggle: `Tenant.sendingLimitsEnabled` (real migration,
+real DDL, `default(true)` so nothing changes for existing tenants)
+gates the daily-cap and quiet-hours checks in both
+`core/gatekeeper/index.ts` (workflow sends) and `core/channels/send.ts`
+(Campaign sends) — opt-out handling is deliberately NOT gated by this,
+since that's a compliance requirement, not a rate limit. Settings'
+Sending limits card got a real on/off switch (optimistic UI, reverts on
+a failed save), still owner/co-owner-only.
+Also this session: fixed the Leads table being unusable on a phone
+(min-w-[1100px] inside overflow-x-auto forces horizontal scroll at
+375px, and a row's height is set by its tallest cell even when that
+cell — e.g. Tags — is scrolled out of view, so a lead with a couple
+tags could show as a tall, mostly-blank row) — added a stacked card
+layout below the `sm` breakpoint, verified against a real test tenant.
+And a portability pass: added `.nvmrc` (Node 22) and `engines.node` in
+package.json, plus a "Working on a new machine" checklist at the top of
+this file — nothing in the repo should assume a specific machine,
+OS account, or absolute path; fix it if you find something that does.
 
 Work on exactly ONE phase item per session unless told otherwise.
 
