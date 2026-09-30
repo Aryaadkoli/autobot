@@ -134,8 +134,9 @@ export default async function AnalyticsPage() {
     <div>
       <h1 className="text-2xl font-semibold text-stone-900 mb-2">Analytics</h1>
       <p className="text-sm text-stone-500 mb-6 max-w-xl">
-        How your messages are actually landing — delivery, reads, and spend,
-        built from the same Messages and Events every send already writes.
+        See how your messages are actually landing: delivery, reads, and
+        what you&apos;re spending. This comes straight from the same records
+        every send already creates, nothing extra to set up.
       </p>
       <AnalyticsClient
         totalAttempts={totalAttempts}

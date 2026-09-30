@@ -2,7 +2,6 @@ import Link from "next/link";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
 import { canView } from "@/lib/permissions";
-import Mascot from "@/components/mascot";
 import { STAGES } from "./contacts/stages";
 import { eventLabel, eventDotClass } from "./contacts/event-meta";
 import { hoursAgo } from "@/lib/dates";
@@ -128,30 +127,12 @@ export default async function OverviewPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="relative mb-6 overflow-hidden rounded-2xl bg-stone-900 px-8 py-7 shrink-0">
-        <div
-          className="pointer-events-none absolute inset-0 [animation:glow-breathe_6s_ease-in-out_infinite]"
-          style={{
-            background:
-              "radial-gradient(circle at 85% 20%, rgba(251,191,36,0.16), transparent 55%)",
-          }}
-        />
-        <div className="pointer-events-none absolute -right-2 -top-6 opacity-90 scale-[0.8] origin-top-right">
-          <Mascot />
-        </div>
-        <div className="relative max-w-[60%]">
-          <h2 className="text-xl font-medium text-white">
-            Welcome back, {name || "there"}
-          </h2>
-          <p className="mt-1.5 text-sm text-stone-400">
-            Here&apos;s what&apos;s happening at {tenant.name} today.
-          </p>
-        </div>
+      <div className="mb-6 shrink-0">
+        <h1 className="text-2xl font-semibold text-stone-900">Overview</h1>
+        <p className="text-sm text-stone-500 mt-0.5">
+          Welcome back, {name || "there"}. Here&apos;s what&apos;s happening at {tenant.name} today.
+        </p>
       </div>
-
-      <h1 className="text-2xl font-semibold text-stone-900 mb-5 shrink-0">
-        Overview
-      </h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
         <div className="lg:col-span-2 space-y-6 min-w-0">

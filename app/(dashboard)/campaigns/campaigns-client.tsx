@@ -684,7 +684,7 @@ export default function CampaignsClient({
         </div>
       </div>
 
-      <div className="flex items-center justify-between mt-8 mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mt-8 mb-3">
         <h2 className="text-sm font-medium text-stone-700">
           Upcoming scheduled campaigns
         </h2>

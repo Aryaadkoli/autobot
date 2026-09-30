@@ -110,8 +110,8 @@ export default function SendTestModal({
           </div>
 
           <p className="text-xs text-stone-400 mb-4">
-            Test messages always go to a fixed number ({TEST_PHONE_DISPLAY}) —
-            never a real lead&apos;s phone — so you can see what the template
+            Test messages always go to a fixed number ({TEST_PHONE_DISPLAY}),
+            never a real lead&apos;s phone, so you can see what the template
             looks like. Nothing is recorded: no Message history, no Activity
             event, no effect on analytics or the daily send cap.
           </p>

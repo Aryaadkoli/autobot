@@ -37,8 +37,8 @@ export default async function CampaignsPage() {
     <div>
       <h1 className="text-2xl font-semibold text-stone-900 mb-2">Campaigns</h1>
       <p className="text-sm text-stone-500 mb-6 max-w-xl">
-        Send one template to a group of leads now, or schedule it for a
-        future date — filtered by tag/stage, or an uploaded list.
+        Send a template to a group of leads right now, or schedule it for
+        later. Pick who gets it by tag or stage, or upload your own list.
       </p>
       <CampaignsClient
         templates={templates}

@@ -104,7 +104,7 @@ export default function TemplatesClient({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <p className="text-sm text-stone-500 max-w-lg">
           Reusable messages for follow-ups. Sends go through a mock channel
           until a WhatsApp/email account is connected.
