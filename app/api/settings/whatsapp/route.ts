@@ -2,7 +2,7 @@ import { z } from "zod";
 import { requireSession } from "@/auth";
 import { prisma } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
-import { requirePermission } from "@/lib/permissions";
+import { isOwnerTier } from "@/lib/permissions";
 
 const WhatsAppSettingsSchema = z.object({
   phoneNumberId: z.string().trim().min(1, "Phone Number ID is required").max(100),
@@ -17,8 +17,9 @@ export async function GET() {
   } catch {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
-  const denied = requirePermission(session, "SETTINGS", "view");
-  if (denied) return denied;
+  if (!isOwnerTier(session.role)) {
+    return Response.json({ error: "Only the owner or co-owner can view WhatsApp credentials" }, { status: 403 });
+  }
 
   const tenant = await prisma.tenant.findUniqueOrThrow({
     where: { id: session.tenantId },
@@ -41,8 +42,10 @@ export async function POST(req: Request) {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const denied = requirePermission(session, "SETTINGS", "edit");
-  if (denied) return denied;
+  // Changing credentials is owner-only — co-owners can view this section (isOwnerTier above) but not edit it.
+  if (session.role !== "OWNER") {
+    return Response.json({ error: "Only the owner can change WhatsApp credentials" }, { status: 403 });
+  }
 
   const parsed = WhatsAppSettingsSchema.safeParse(await req.json());
   if (!parsed.success) {
@@ -73,8 +76,9 @@ export async function DELETE() {
     return Response.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const denied = requirePermission(session, "SETTINGS", "edit");
-  if (denied) return denied;
+  if (session.role !== "OWNER") {
+    return Response.json({ error: "Only the owner can change WhatsApp credentials" }, { status: 403 });
+  }
 
   await prisma.tenant.update({
     where: { id: session.tenantId },

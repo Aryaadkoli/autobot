@@ -4,6 +4,7 @@ import { canEdit, isOwnerTier } from "@/lib/permissions";
 import SettingsClient from "./settings-client";
 import SendingLimits from "./sending-limits";
 import RolesReference from "./roles-reference";
+import WhatsAppConnection from "./whatsapp-connection";
 
 export default async function SettingsPage() {
   const session = await requireSession();
@@ -32,6 +33,9 @@ export default async function SettingsPage() {
         dailyCapPerContact: true,
         quietHoursStart: true,
         quietHoursEnd: true,
+        waPhoneNumberId: true,
+        waBusinessAcctId: true,
+        waAccessTokenEnc: true,
       },
     }),
   ]);
@@ -53,6 +57,15 @@ export default async function SettingsPage() {
             dailyCapPerContact={tenant.dailyCapPerContact}
             quietHoursStart={tenant.quietHoursStart}
             quietHoursEnd={tenant.quietHoursEnd}
+          />
+        )}
+
+        {ownerTier && (
+          <WhatsAppConnection
+            canEdit={session.role === "OWNER"}
+            connected={Boolean(tenant.waPhoneNumberId && tenant.waAccessTokenEnc)}
+            phoneNumberId={tenant.waPhoneNumberId}
+            businessAcctId={tenant.waBusinessAcctId}
           />
         )}
 
